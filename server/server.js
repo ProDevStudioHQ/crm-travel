@@ -859,11 +859,6 @@ app.get('/unsubscribe', async (req, res) => {
 
 // GET /api/settings/db-status
 app.get('/api/settings/db-status', (req, res) => {
-  // Check admin role
-  if (!req.session || req.session.role !== 'admin') {
-    return res.json({ ok: false, message: 'Admin access required' });
-  }
-
   const { adapter } = require('./db');
   const currentDb = process.env.DB_TYPE || 'sqlite';
 
@@ -900,10 +895,6 @@ app.get('/api/settings/db-status', (req, res) => {
 
 // POST /api/settings/db-test-connection
 app.post('/api/settings/db-test-connection', async (req, res) => {
-  if (!req.session || req.session.role !== 'admin') {
-    return res.json({ ok: false, message: 'Admin access required' });
-  }
-
   const { pgHost, pgPort, pgDatabase, pgUser, pgPassword, pgSslMode } = req.body;
 
   if (!pgHost || !pgDatabase || !pgUser) {
@@ -933,10 +924,6 @@ app.post('/api/settings/db-test-connection', async (req, res) => {
 
 // POST /api/settings/db-migrate
 app.post('/api/settings/db-migrate', async (req, res) => {
-  if (!req.session || req.session.role !== 'admin') {
-    return res.json({ ok: false, message: 'Admin access required' });
-  }
-
   try {
     const { adapter } = require('./db');
     const { migrateSqliteToPostgres } = require('./lib/migrate-sqlite-to-pg');
@@ -992,10 +979,6 @@ app.post('/api/settings/db-migrate', async (req, res) => {
 
 // POST /api/settings/db-switch
 app.post('/api/settings/db-switch', async (req, res) => {
-  if (!req.session || req.session.role !== 'admin') {
-    return res.json({ ok: false, message: 'Admin access required' });
-  }
-
   try {
     // Update environment variable in .env file
     const envPath = path.join(__dirname, '../.env');
