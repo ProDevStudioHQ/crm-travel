@@ -157,7 +157,8 @@ async function processQueue() {
             await db.updateEmailStatus(email.id, 'sending');
 
             // Inject tracking + compliance
-            const finalHtml = injectTracking(email.html || '', email, smtp);
+            // FIX: Use 'body' field (not 'html') from email_queue table
+            const finalHtml = injectTracking(email.body || '', email, smtp);
 
             const mailOptions = {
                 from: `"${fromName}" <${fromEmail}>`,
@@ -190,9 +191,10 @@ async function processQueue() {
                 // Determine if permanently failed
                 const tries = (email.tries || 0) + 1;
                 if (!result.retryable || tries >= 3) {
-                    await db.updateEmailStatus(email.id, 'failed', result.error);
+                    // FIX: Pass error message to track why it failed
+                    await db.updateEmailStatus(email.id, 'failed', null, result.error);
                     failCount++;
-                    console.error(`Worker: ✘ Permanently failed → ${email.to_email}: ${result.error}`);
+                    console.error(`Worker: ✘ Permanently failed → ${email.to_email}: ${result.error} (tries: ${tries})`);
 
                     if (email.campaign_id) {
                         const evtType = result.errorType === 'bounce_hard' ? 'bounce' : 'bounce';
@@ -202,9 +204,10 @@ async function processQueue() {
                         });
                     }
                 } else {
-                    // Re-queue for next cycle
-                    await db.updateEmailStatus(email.id, 'pending', result.error);
-                    console.warn(`Worker: ⟳ Will retry → ${email.to_email} (attempt ${tries})`);
+                    // Re-queue for next cycle with error tracking
+                    // FIX: Pass error so we can debug what's happening on retries
+                    await db.updateEmailStatus(email.id, 'pending', null, result.error);
+                    console.warn(`Worker: ⟳ Will retry → ${email.to_email} (attempt ${tries}/3, error: ${result.error})`);
                 }
             }
 

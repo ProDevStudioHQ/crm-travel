@@ -48,9 +48,25 @@ async function initDb() {
             campaign_id INTEGER,
             scheduled_at TEXT,
             sent_at TEXT,
+            error TEXT,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
           )
         `);
+        
+        // FIX: Ensure error and updated_at columns exist (migrations from old schema)
+        // Use setTimeout to avoid blocking table creation
+        setTimeout(() => {
+          db.run(`ALTER TABLE email_queue ADD COLUMN error TEXT`, (err) => {
+            if (err) console.log('[DB Migration] error column:', err.message);
+          });
+          db.run(`ALTER TABLE email_queue ADD COLUMN updated_at TEXT DEFAULT CURRENT_TIMESTAMP`, (err) => {
+            if (err) console.log('[DB Migration] updated_at column:', err.message);
+          });
+          // Create indexes for faster queries (after columns exist)
+          db.run(`CREATE INDEX IF NOT EXISTS idx_email_queue_status ON email_queue(status)`);
+          db.run(`CREATE INDEX IF NOT EXISTS idx_email_queue_scheduled ON email_queue(scheduled_at)`);
+        }, 500);
 
         // Enrichment jobs
         db.run(`
@@ -271,18 +287,47 @@ async function addToQueue(toEmail, subject, body, campaignId = null) {
 }
 
 async function getPendingEmails(limit = 50) {
-  return await adapter.all(
-    'SELECT * FROM email_queue WHERE status = ? LIMIT ?',
-    ['pending', limit]
-  );
+  // FIX: Handle 3 cases:
+  // 1. Pending emails (not yet sent)
+  // 2. Scheduled emails (scheduled_at <= now)
+  // 3. Stuck 'sending' emails older than 5 minutes (worker crash recovery)
+  
+  const now = new Date().toISOString();
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  
+  return await adapter.all(`
+    SELECT * FROM email_queue 
+    WHERE 
+      (status = 'pending' AND (scheduled_at IS NULL OR scheduled_at <= ?))
+      OR (status = 'sending' AND created_at < ?)
+    ORDER BY created_at ASC
+    LIMIT ?
+  `, [now, fiveMinutesAgo, limit]);
 }
 
-async function updateEmailStatus(emailId, status, sentAt = null) {
-  const query = sentAt
-    ? 'UPDATE email_queue SET status = ?, sent_at = ? WHERE id = ?'
-    : 'UPDATE email_queue SET status = ? WHERE id = ?';
+async function updateEmailStatus(emailId, status, sentAt = null, error = null) {
+  // FIX: Properly track retries by incrementing 'tries' field
+  // Also track error message and last attempt timestamp
+  let query;
+  let params;
   
-  const params = sentAt ? [status, sentAt, emailId] : [status, emailId];
+  if (status === 'sent') {
+    query = 'UPDATE email_queue SET status = ?, sent_at = ?, tries = tries + 1 WHERE id = ?';
+    params = [status, sentAt || new Date().toISOString(), emailId];
+  } else if (status === 'pending' && error) {
+    // Retrying: increment tries and store error
+    query = 'UPDATE email_queue SET status = ?, tries = tries + 1, error = ? WHERE id = ?';
+    params = [status, error, emailId];
+  } else if (status === 'failed') {
+    // Final failure: mark as failed with error
+    query = 'UPDATE email_queue SET status = ?, tries = tries + 1, error = ?, sent_at = ? WHERE id = ?';
+    params = [status, error || null, new Date().toISOString(), emailId];
+  } else {
+    // Other status (sending, pending, etc.)
+    query = 'UPDATE email_queue SET status = ?, updated_at = ? WHERE id = ?';
+    params = [status, new Date().toISOString(), emailId];
+  }
+  
   await adapter.run(query, params);
 }
 

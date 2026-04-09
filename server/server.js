@@ -1153,6 +1153,125 @@ app.post('/api/settings/db-switch', async (req, res) => {
   }
 });
 
+// ════════════════ EMAIL QUEUE DIAGNOSTICS ════════════════
+// Check queue status, stuck jobs, and errors
+app.get('/api/queue/status', async (req, res) => {
+  try {
+    const stats = await db.dbAll(`
+      SELECT 
+        status,
+        COUNT(*) as count,
+        AVG(tries) as avg_tries,
+        MIN(created_at) as oldest,
+        MAX(created_at) as newest
+      FROM email_queue
+      GROUP BY status
+    `);
+
+    const stuck = await db.dbAll(`
+      SELECT 
+        id, to_email, status, tries, error, created_at, updated_at
+      FROM email_queue
+      WHERE (status = 'sending' AND created_at < datetime('now', '-5 minutes'))
+         OR (status = 'pending' AND tries >= 3)
+      ORDER BY created_at DESC
+      LIMIT 20
+    `);
+
+    const recent = await db.dbAll(`
+      SELECT id, to_email, status, tries, error, created_at
+      FROM email_queue
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+
+    res.json({
+      ok: true,
+      queue_stats: stats,
+      stuck_jobs: stuck,
+      recent_jobs: recent,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Queue status error:', err);
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+// Fix stuck jobs: reset 'sending' status to 'pending' for recovery
+app.post('/api/queue/fix-stuck', async (req, res) => {
+  try {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    
+    // Reset stuck 'sending' jobs to 'pending' so worker can retry
+    await db.dbRun(`
+      UPDATE email_queue 
+      SET status = 'pending', error = ?, updated_at = ?
+      WHERE status = 'sending' AND created_at < ?
+    `, ['Reset from stuck sending status', new Date().toISOString(), fiveMinutesAgo]);
+
+    // Mark emails with 3+ tries as failed (give up)
+    await db.dbRun(`
+      UPDATE email_queue
+      SET status = 'failed', error = ?, updated_at = ?
+      WHERE status = 'pending' AND tries >= 3
+    `, ['Max retries (3) reached', new Date().toISOString()]);
+
+    // Get the results
+    const pending = await db.dbGet(`SELECT COUNT(*) as count FROM email_queue WHERE status = 'pending'`);
+    const failed = await db.dbGet(`SELECT COUNT(*) as count FROM email_queue WHERE status = 'failed'`);
+    const sent = await db.dbGet(`SELECT COUNT(*) as count FROM email_queue WHERE status = 'sent'`);
+
+    res.json({
+      ok: true,
+      message: 'Queue fixed and recovered',
+      stats: {
+        pending: pending.count,
+        failed: failed.count,
+        sent: sent.count
+      }
+    });
+
+    // Trigger worker immediately
+    setTimeout(() => {
+      console.log('[Queue] Manual trigger after fix-stuck');
+      processQueue().catch(err => console.error('Error:', err));
+    }, 500);
+
+  } catch (err) {
+    console.error('Fix stuck error:', err);
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+// Clear all failed emails (optional cleanup)
+app.post('/api/queue/clear-failed', async (req, res) => {
+  try {
+    await db.dbRun(`DELETE FROM email_queue WHERE status = 'failed'`);
+    res.json({ ok: true, message: 'All failed emails cleared' });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err.message });
+  }
+});
+
+// Test SMTP connection
+app.post('/api/queue/test-smtp', async (req, res) => {
+  try {
+    const smtp = await db.getSetting('smtp');
+    if (!smtp || !smtp.host) {
+      return res.json({ ok: false, message: 'SMTP not configured' });
+    }
+
+    const { buildTransport } = require('./lib/mailer');
+    const transporter = buildTransport(smtp);
+
+    await transporter.verify();
+    res.json({ ok: true, message: 'SMTP connection verified ✓', config: { host: smtp.host, port: smtp.port } });
+  } catch (err) {
+    res.json({ ok: false, message: 'SMTP test failed: ' + err.message });
+  }
+});
+
 // SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(clientDir, 'index.html'));
