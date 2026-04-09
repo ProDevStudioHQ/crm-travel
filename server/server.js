@@ -521,6 +521,143 @@ app.post('/api/campaigns/send', async (req, res) => {
     return res.status(500).json({ ok: false, message: e.message || 'Queueing failed' });
   }
 });
+
+// ════════════════ DIRECT SEND (IMMEDIATE) ════════════════
+// Sends emails immediately without queueing
+app.post('/api/campaigns/send-direct', async (req, res) => {
+  try {
+    const { campaign, template, recipients } = req.body || {};
+
+    if (!recipients || !recipients.length) {
+      return res.status(400).json({ ok: false, message: 'No recipients provided.' });
+    }
+
+    // Check SMTP config
+    const smtp = await db.getSetting('smtp');
+    if (!smtp || !smtp.host || !smtp.username || !smtp.password) {
+      return res.status(400).json({ ok: false, message: 'SMTP not configured' });
+    }
+
+    try {
+      await db.initCampaignAnalytics(campaign, recipients);
+    } catch (err) {
+      console.error("Failed to initialize campaign analytics:", err);
+    }
+
+    // Build transporter
+    const { buildTransport, sendEmail } = require('./lib/mailer');
+    const transporter = buildTransport(smtp);
+
+    // Verify SMTP connection
+    try {
+      await transporter.verify();
+    } catch (err) {
+      return res.status(400).json({ 
+        ok: false, 
+        message: 'SMTP connection failed: ' + err.message 
+      });
+    }
+
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.write(JSON.stringify({ status: 'starting', total: recipients.length }) + '\n');
+
+    const fromName = smtp.fromName || 'PM Travel Agency';
+    const useAuthAsFrom = smtp.useAuthAsFrom !== false;
+    const fromEmail = useAuthAsFrom ? smtp.username : (smtp.fromEmail || smtp.username);
+    const replyTo = smtp.replyTo || fromEmail;
+
+    let sentCount = 0;
+    let failCount = 0;
+
+    // Send emails with 2-5s delay between each
+    for (let i = 0; i < recipients.length; i++) {
+      const email = recipients[i];
+      const finalHtml = template.body
+        ? template.body.replace(/\{email\}/g, email).replace(/\{unsubscribe\}/g, 
+            `${smtp.domain || 'https://www.pm-travelagency.com'}/unsubscribe?email=${encodeURIComponent(email)}`)
+        : '';
+
+      const mailOptions = {
+        from: `"${fromName}" <${fromEmail}>`,
+        to: email,
+        subject: template.subject,
+        html: finalHtml,
+        replyTo,
+        headers: {
+          'X-Mailer': 'PM-Travel-CRM/1.0',
+          'List-Unsubscribe': `<${smtp.domain || 'https://www.pm-travelagency.com'}/unsubscribe?email=${encodeURIComponent(email)}>`
+        }
+      };
+
+      try {
+        const result = await sendEmail(transporter, mailOptions, 3);
+        if (result.ok) {
+          sentCount++;
+          if (campaign && campaign.id) {
+            await db.logCampaignEvent(campaign.id, email, 'delivered', {
+              messageId: result.messageId,
+              timestamp: new Date().toISOString()
+            });
+          }
+          res.write(JSON.stringify({ 
+            status: 'sent', 
+            email, 
+            progress: i + 1,
+            total: recipients.length,
+            sent: sentCount,
+            failed: failCount
+          }) + '\n');
+        } else {
+          failCount++;
+          if (campaign && campaign.id) {
+            await db.logCampaignEvent(campaign.id, email, 'bounce', {
+              reason: result.error,
+              timestamp: new Date().toISOString()
+            });
+          }
+          res.write(JSON.stringify({ 
+            status: 'failed', 
+            email, 
+            error: result.error,
+            progress: i + 1,
+            total: recipients.length,
+            sent: sentCount,
+            failed: failCount
+          }) + '\n');
+        }
+      } catch (err) {
+        failCount++;
+        res.write(JSON.stringify({ 
+          status: 'error', 
+          email, 
+          error: err.message,
+          progress: i + 1,
+          total: recipients.length,
+          sent: sentCount,
+          failed: failCount
+        }) + '\n');
+      }
+
+      // Anti-spam delay (2-5s between sends)
+      if (i < recipients.length - 1) {
+        await new Promise(r => setTimeout(r, 2000 + Math.random() * 3000));
+      }
+    }
+
+    res.write(JSON.stringify({ 
+      status: 'complete', 
+      sent: sentCount, 
+      failed: failCount, 
+      total: recipients.length
+    }) + '\n');
+    res.end();
+
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ ok: false, message: e.message || 'Send failed' });
+  }
+});
+
 // ---------------- Manual Worker Trigger ----------------
 
 app.post('/api/worker/process', async (req, res) => {

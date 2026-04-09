@@ -1177,6 +1177,17 @@ const Campaigns = {
         }
         confirmMsg += `
                 </ul>
+                <div style="margin:15px 0; padding:12px; background:rgba(100,150,255,0.1); border-left:3px solid var(--info); border-radius:4px;">
+                    <div style="font-size:12px; margin-bottom:8px; font-weight:600;">Send Mode:</div>
+                    <label style="display:flex; align-items:center; margin:8px 0; cursor:pointer; font-size:12px;">
+                        <input type="radio" name="sendMode" value="direct" style="margin-right:8px;">
+                        <span><b>Direct Send</b> - Sends immediately (real-time, up to ${recipients.length} emails)</span>
+                    </label>
+                    <label style="display:flex; align-items:center; margin:8px 0; cursor:pointer; font-size:12px;">
+                        <input type="radio" name="sendMode" value="queue" checked style="margin-right:8px;">
+                        <span><b>Queue & Process</b> - Queues emails, background worker processes every 15s</span>
+                    </label>
+                </div>
                 <div style="font-size:11px; color:var(--text-muted); margin-bottom:5px;">Target Sample:</div>
                 <div style="background:#000; color:#0f0; padding:10px; font-family:monospace; font-size:11px; border-radius:4px; max-height:80px; overflow-y:auto;">
                     ${recipients.slice(0, 5).join('<br>')}
@@ -1192,45 +1203,105 @@ const Campaigns = {
                 return UI.showToast('SMTP not configured.', 'error');
             }
 
-            if (campaign.batchSize && campaign.batchIntervalHours) {
-                UI.showToast(`Batching to ${recipients.length} recipients...`, 'info');
+            // Get selected send mode from radio button
+            const sendMode = document.querySelector('input[name="sendMode"]:checked')?.value || 'queue';
+            const endpoint = sendMode === 'direct' 
+                ? '/api/campaigns/send-direct' 
+                : '/api/campaigns/send';
+
+            if (sendMode === 'direct') {
+                UI.showToast(`Sending ${recipients.length} emails directly (real-time)...`, 'info');
             } else {
-                UI.showToast(`Sending to ${recipients.length} recipients...`, 'info');
+                if (campaign.batchSize && campaign.batchIntervalHours) {
+                    UI.showToast(`Queuing ${recipients.length} recipients in batches...`, 'info');
+                } else {
+                    UI.showToast(`Queuing ${recipients.length} emails...`, 'info');
+                }
             }
 
             try {
-                const response = await fetch(store.apiBase() + '/api/campaigns/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        template: {
-                            subject: campaign.subject,
-                            body: campaign.body
-                        },
-                        campaign: { name: campaign.name, id: campaign.id },
-                        recipients,
-                        batchSize: campaign.batchSize,
-                        batchIntervalHours: campaign.batchIntervalHours
-                    })
-                });
+                if (sendMode === 'direct') {
+                    // Direct send with streaming response
+                    const response = await fetch(store.apiBase() + endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            template: {
+                                subject: campaign.subject,
+                                body: campaign.body
+                            },
+                            campaign: { name: campaign.name, id: campaign.id },
+                            recipients
+                        })
+                    });
 
-                const result = await response.json();
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.message || 'Send failed');
+                    }
 
-                if (!result.ok) throw new Error(result.message);
+                    // Handle streaming NDJSON response
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let sent = 0, failed = 0, total = recipients.length;
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n').filter(l => l.trim());
+
+                        for (const line of lines) {
+                            try {
+                                const event = JSON.parse(line);
+                                if (event.status === 'sent') {
+                                    sent++;
+                                    console.log(`✓ Sent to ${event.email}`);
+                                } else if (event.status === 'failed') {
+                                    failed++;
+                                    console.warn(`✗ Failed to ${event.email}: ${event.error}`);
+                                } else if (event.status === 'complete') {
+                                    console.log(`Direct send complete: ${event.sent} sent, ${event.failed} failed`);
+                                }
+                            } catch (e) { }
+                        }
+                    }
+
+                    UI.showToast(`✓ Direct send complete: ${sent} sent, ${failed} failed`, 'success');
+                } else {
+                    // Queue mode (existing flow)
+                    const response = await fetch(store.apiBase() + endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            template: {
+                                subject: campaign.subject,
+                                body: campaign.body
+                            },
+                            campaign: { name: campaign.name, id: campaign.id },
+                            recipients,
+                            batchSize: campaign.batchSize,
+                            batchIntervalHours: campaign.batchIntervalHours
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (!result.ok) throw new Error(result.message);
+
+                    UI.showToast(`✓ ${result.message}`, 'success');
+                    const toDemo = result.queued || recipients.length;
+                    if (toDemo > 0) {
+                        setTimeout(() => this.startLiveSimulation(campaign.id, toDemo), 2000);
+                    }
+                }
 
                 // Update campaign status
                 campaign.status = 'sent';
                 campaign.sentAt = new Date().toISOString();
                 store.saveCampaign(campaign);
-
-                UI.showToast(`✓ ${result.message}`, 'success');
                 this.render();
 
-                // Start Live Simulation for demo purposes
-                const toDemo = result.queued || recipients.length;
-                if (toDemo > 0) {
-                    setTimeout(() => this.startLiveSimulation(campaign.id, toDemo), 2000);
-                }
             } catch (err) {
                 UI.showToast(`Error: ${err.message}`, 'error');
             }
