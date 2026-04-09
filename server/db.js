@@ -266,15 +266,26 @@ async function initDb() {
 // Database helper functions using the adapter
 async function getSetting(key) {
   const row = await adapter.get('SELECT value FROM settings WHERE key = ?', [key]);
-  return row ? row.value : null;
+  if (!row) return null;
+  
+  // FIX: Parse JSON strings back to objects for SMTP/IMAP configs
+  try {
+    return typeof row.value === 'string' && row.value.startsWith('{') ? JSON.parse(row.value) : row.value;
+  } catch (e) {
+    // If not valid JSON, return as-is
+    return row.value;
+  }
 }
 
 async function saveSetting(key, value) {
-  const existing = await getSetting(key);
-  if (existing) {
-    await adapter.run('UPDATE settings SET value = ? WHERE key = ?', [value, key]);
+  // FIX: Always store objects as JSON strings so they can be retrieved correctly
+  const storageValue = (typeof value === 'object' && value !== null) ? JSON.stringify(value) : value;
+  
+  const row = await adapter.get('SELECT value FROM settings WHERE key = ?', [key]);
+  if (row) {
+    await adapter.run('UPDATE settings SET value = ? WHERE key = ?', [storageValue, key]);
   } else {
-    await adapter.run('INSERT INTO settings (key, value) VALUES (?, ?)', [key, value]);
+    await adapter.run('INSERT INTO settings (key, value) VALUES (?, ?)', [key, storageValue]);
   }
 }
 
