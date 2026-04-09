@@ -1,0 +1,121 @@
+{
+  "name": "3. WhatsApp Message Sender",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-whatsapp",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format WhatsApp message with personalization\nconst data = items[0].json;\nconst contacts = data.contacts || [data];\n\nreturn contacts.map(c => ({\n  json: {\n    phone: c.phone?.replace(/[^0-9+]/g, '') || '',\n    name: c.name || 'Partner',\n    company: c.company || '',\n    message: data.template \n      ? data.template\n          .replace(/\\{\\{name\\}\\}/gi, c.name || 'Partner')\n          .replace(/\\{\\{company\\}\\}/gi, c.company || '')\n      : `Hello ${c.name || 'Partner'} 👋\\n\\nThis is PM Travel Agency from Marrakech, Morocco.\\nWe specialize in authentic Moroccan travel experiences.\\n\\nWould you be interested in a B2B partnership for 2026 departures?\\n\\nBest regards,\\nPM Travel Agency`\n  }\n})).filter(c => c.json.phone);"
+      },
+      "id": "format-message",
+      "name": "Format Messages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": { "reset": false }
+      },
+      "id": "batch",
+      "name": "Process One by One",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "amount": "={{Math.floor(Math.random() * 5000) + 5000}}",
+        "unit": "milliseconds"
+      },
+      "id": "delay",
+      "name": "Anti-Block Delay (5-10s)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v18.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{$env.WHATSAPP_ACCESS_TOKEN}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{$json.phone}}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{$json.message}}\"\n  }\n}"
+      },
+      "id": "send-whatsapp",
+      "name": "Send WhatsApp (Cloud API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.twilio.com/2010-04-01/Accounts/{{$env.TWILIO_ACCOUNT_SID}}/Messages.json",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Basic {{Buffer.from($env.TWILIO_ACCOUNT_SID + ':' + $env.TWILIO_AUTH_TOKEN).toString('base64')}}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "From", "value": "=whatsapp:{{$env.TWILIO_WHATSAPP_FROM}}" },
+            { "name": "To", "value": "=whatsapp:{{$json.phone}}" },
+            { "name": "Body", "value": "={{$json.message}}" }
+          ]
+        }
+      },
+      "id": "send-twilio",
+      "name": "Send WhatsApp (Twilio)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1100, 450],
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CRM_URL}}/api/n8n/update",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"email\": \"{{$json.phone}}\", \"event\": \"whatsapp_sent\", \"status\": \"contacted\"}"
+      },
+      "id": "update-crm",
+      "name": "Update CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1320, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Format Messages", "type": "main", "index": 0 }]] },
+    "Format Messages": { "main": [[{ "node": "Process One by One", "type": "main", "index": 0 }]] },
+    "Process One by One": { "main": [[{ "node": "Anti-Block Delay (5-10s)", "type": "main", "index": 0 }]] },
+    "Anti-Block Delay (5-10s)": { "main": [[{ "node": "Send WhatsApp (Cloud API)", "type": "main", "index": 0 }]] },
+    "Send WhatsApp (Cloud API)": { "main": [[{ "node": "Update CRM", "type": "main", "index": 0 }]] },
+    "Update CRM": { "main": [[{ "node": "Process One by One", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "whatsapp" }, { "name": "outreach" }]
+}

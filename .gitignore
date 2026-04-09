@@ -1,0 +1,23 @@
+# Node
+node_modules/
+
+# Environment (contains secrets)
+.env
+
+# SQLite DB (generated at runtime)
+server/database.sqlite
+
+# Logs / debug
+*.log
+debug_output*.txt
+smtp_check.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (runtime generated)
+data/crm/uploads/
+data/crm/imports/
+data/crm/exports/
+data/crm/backups/

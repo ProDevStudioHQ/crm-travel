@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TravelCRM - Dashboard</title>
+    <!-- Google Fonts for Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome for Icons (using CDN for simplicity) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+    <!-- SheetJS for XLSX support -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Chart.js for Interactive Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">
+                    <i class="fa-solid fa-plane-departure"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>TravelCRM</h1>
+                    <span>Global Dashboard</span>
+                </div>
+            </div>
+
+            <div class="nav-section">General</div>
+            <div class="nav-menu">
+                <div class="nav-item" data-target="b2b" title="Corporate & Travel Agency Partners"
+                    aria-label="B2B Clients">
+                    <div class="nav-left">
+                        <i class="fa-regular fa-building nav-icon"></i>
+                        <span>B2B Clients</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="b2c" title="Direct Traveler Profiles & Leads"
+                    aria-label="B2C Clients">
+                    <div class="nav-left">
+                        <i class="fa-regular fa-user nav-icon"></i>
+                        <span>B2C Clients</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="analytics" title="Business Intelligence & Analytics"
+                    aria-label="Analytics">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-chart-line nav-icon"></i>
+                        <span>Analytics</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav-section" style="margin-top: 15px;">Email Intelligence</div>
+            <div class="nav-menu">
+                <div class="nav-item" data-target="mail" title="Email Management & Correspondence"
+                    aria-label="Mail Inbox">
+                    <div class="nav-left">
+                        <i class="fa-regular fa-envelope nav-icon"></i>
+                        <span>Mail</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="templates" title="Email Template Library" aria-label="Templates">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-layer-group nav-icon"></i>
+                        <span>Templates</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="automation" title="Workflow Triggers & Rules"
+                    aria-label="Automation">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-bolt-lightning nav-icon"></i>
+                        <span>Automation</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="email_logs" title="Transmission History & KPIs"
+                    aria-label="Email Logs">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-list-check nav-icon"></i>
+                        <span>Email Logs</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="lead_filter" title="Import & Filter Emails (B2B/B2C)"
+                    aria-label="Lead Filter">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-filter nav-icon"></i>
+                        <span>Lead Filter</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="lead_enrich" title="Lead Enrichment & Data Quality"
+                    aria-label="Enrichment">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-wand-magic-sparkles nav-icon"></i>
+                        <span>Enrichment</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="lead_duplicates" title="Duplicate Detection & Merge"
+                    aria-label="Duplicates">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-clone nav-icon"></i>
+                        <span>Duplicates</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="lead_verify" title="Email Verification & Validation"
+                    aria-label="Email Verify">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-envelope-circle-check nav-icon"></i>
+                        <span>Email Verify</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="nav-section" style="margin-top: 15px;">Revenue & Marketing</div>
+            <div class="nav-menu">
+                <div class="nav-item" data-target="quotes" title="Draft & Sent Proposals"
+                    aria-label="Quotes Management">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-file-invoice-dollar nav-icon"></i>
+                        <span>Quotes</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="bookings" title="Operational Travel & Logistics"
+                    aria-label="Bookings Management">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-plane nav-icon"></i>
+                        <span>Bookings</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="campaigns" title="Email & WhatsApp Marketing Blast"
+                    aria-label="Marketing Campaigns">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-bullhorn nav-icon"></i>
+                        <span>Campaigns</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="audiences" title="Segmented Contact Lists for Targeting"
+                    aria-label="Audience Lists">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-users-rectangle nav-icon"></i>
+                        <span>Audiences</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav-section" style="margin-top: 15px;">Finance</div>
+            <div class="nav-menu">
+                <div class="nav-item" data-target="invoices" title="Client Billing & Payment Tracking"
+                    aria-label="Invoices">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-file-invoice nav-icon"></i>
+                        <span>Invoices</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav-section" style="margin-top: 15px;">Catalogue</div>
+            <div class="nav-menu">
+                <div class="nav-item" data-target="catalogues" title="All Catalogues & HTML Imports"
+                    aria-label="All Catalogues">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-book-open nav-icon"></i>
+                        <span>All Catalogues</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="catalogue_import" title="Import HTML from Desktop"
+                    aria-label="Import HTML">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-file-import nav-icon"></i>
+                        <span>Import HTML</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-target="catalogue_new" title="Create New Catalogue"
+                    aria-label="New Catalogue">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-plus-circle nav-icon"></i>
+                        <span>New Catalogue</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav-section" style="margin-top: 15px;">Connect & More</div>
+            <div class="nav-menu">
+                <div class="nav-item" data-target="whatsapp" title="Real-time Social Messaging"
+                    aria-label="WhatsApp Chats">
+                    <div class="nav-left">
+                        <i class="fa-brands fa-whatsapp nav-icon"></i>
+                        <span>WhatsApp</span>
+                    </div>
+                    <span class="badge badge-green">5</span>
+                </div>
+
+                <div class="nav-item" data-target="ai_lead_finder" title="AI Lead Finder — Find Tour Operators Worldwide"
+                    aria-label="AI Lead Finder">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-wand-magic-sparkles nav-icon"></i>
+                        <span>AI Lead Finder</span>
+                    </div>
+                    <span class="badge" style="background:linear-gradient(135deg,#7c3aed,#a855f7); color:#fff; font-size:8px;">AI</span>
+                </div>
+
+                <div class="nav-item" data-target="n8n_hub" title="n8n Automation Hub — Lead Scraping & Outreach"
+                    aria-label="n8n Hub">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-robot nav-icon"></i>
+                        <span>n8n Hub</span>
+                    </div>
+                    <span class="badge" style="background:linear-gradient(135deg,#ff6d00,#ff9100); color:#fff; font-size:8px;">NEW</span>
+                </div>
+
+                <div class="nav-item" data-target="settings" title="System Configuration & Security"
+                    aria-label="Settings">
+                    <div class="nav-left">
+                        <i class="fa-solid fa-gear nav-icon"></i>
+                        <span>Settings</span>
+                    </div>
+                </div>
+            </div>
+
+
+
+            <div class="user-profile">
+                <img src="https://ui-avatars.com/api/?name=Sarah+Jenkins&background=0D8ABC&color=fff" alt="User Avatar"
+                    class="avatar">
+                <div class="user-info">
+                    <h4>Sarah Jenkins</h4>
+                    <p>Senior Agent</p>
+                </div>
+                <button class="icon-btn" style="margin-left: auto; color: var(--danger); opacity: 0.7;"
+                    onclick="Auth.confirmLogout()" title="Secure Logout" aria-label="Sign out of system">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <h2 class="page-title" id="pageTitle">B2B Clients</h2>
+            </div>
+
+            <div class="topbar-center">
+                <div class="modern-search-bar">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="globalSearchInput" placeholder="Search system...">
+                </div>
+            </div>
+
+            <div class="topbar-right">
+                <button class="input-date" id="dateRangeBtn" type="button" title="Selected Date Range Filter"
+                    aria-label="Change date range" tabindex="0">
+                    <i class="fa-regular fa-calendar" style="margin-right: 8px;"></i>
+                    <span id="dateRangeLabel">Oct 1 - Oct 31, 2026</span>
+                </button>
+
+                <!-- Filters are now module-specific and injected by individual modules -->
+
+                <button class="btn-primary" onclick="UI.showToast('Launcher restricted in demo mode', 'info')"
+                    title="Advanced Tools & Quick Links" aria-label="Open global launcher">
+                    <i class="fa-solid fa-bolt"></i>
+                    Quick Action
+                </button>
+
+                <button class="icon-btn" onclick="location.reload()" title="Refresh System" aria-label="Refresh Page">
+                    <i class="fa-solid fa-arrows-rotate"></i>
+                </button>
+                <button class="icon-btn" onclick="toggleTheme()" title="Switch Visual Mode"
+                    aria-label="Toggle dark/light theme">
+                    <i class="fa-regular fa-moon"></i>
+                </button>
+                <button class="icon-btn" onclick="UI.toggleNotifications()" title="System Alerts & Updates"
+                    aria-label="Open notifications center">
+                    <i class="fa-regular fa-bell"></i>
+                </button>
+            </div>
+
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content" id="mainContent">
+            <!-- Content will be injected here by app.js -->
+        </main>
+
+        <!-- Global Modal -->
+        <div id="modalOverlay" class="modal-overlay hidden">
+            <div class="modal">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="modalTitle">Modal Title</h3>
+                    <button class="modal-close" onclick="Modal.close()" title="Dismiss Modal" aria-label="Close">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Dynamic Content -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="utils/table-pro.js"></script>
+    <script src="utils/rbac.js"></script>
+    <script src="utils/session.js"></script>
+    <script src="utils/audit.js"></script>
+    <script src="utils/campaign-logs.js"></script>
+    <script src="utils/modern-select.js"></script>
+    <script src="store.js"></script>
+    <script src="modules/dashboard.js"></script>
+    <script src="modules/ai.js"></script>
+    <script src="modules/auth.js"></script>
+    <script src="modules/mail.js"></script>
+    <script src="modules/clients.js"></script> <!-- Handles B2B and B2C -->
+    <script src="modules/sales.js"></script>
+    <script src="modules/quotes.js"></script>
+    <script src="modules/bookings.js"></script>
+    <script src="modules/campaigns.js"></script>
+    <script src="modules/audiences.js"></script>
+    <script src="modules/importer.js"></script>
+    <script src="modules/lead_filter.js"></script>
+    <script src="modules/lead_enrich.js"></script>
+    <script src="modules/lead_duplicates.js"></script>
+    <script src="modules/lead_verify.js"></script>
+    <script src="modules/whatsapp.js"></script>
+
+    <script src="modules/settings.js"></script>
+    <script src="modules/wizard.js"></script>
+    <script src="modules/templates.js"></script>
+    <script src="modules/automation.js"></script>
+    <script src="modules/n8n_hub.js"></script>
+    <script src="modules/ai_lead_finder.js"></script>
+    <script src="modules/email_logs.js"></script>
+    <script src="modules/invoices.js"></script>
+    <script src="modules/analytics.js"></script>
+
+    <script src="modules/catalogue.js"></script>
+    <input type="file" id="import-file" accept=".csv,.tsv,.txt,.xlsx,.xls,.json" hidden>
+    <script src="app.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,113 @@
+{
+  "name": "4. Follow-Up Automation (Day 1/2/3 Sequence)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 12 }] }
+      },
+      "id": "schedule",
+      "name": "Check Every 12h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.CRM_URL}}/api/n8n/leads?status=contacted&limit=50",
+        "options": {}
+      },
+      "id": "fetch-contacted",
+      "name": "Fetch Contacted Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Determine which follow-up step each lead needs\nconst leads = items[0].json.leads || [];\nconst now = Date.now();\nconst DAY = 86400000;\n\nconst actions = [];\n\nfor (const lead of leads) {\n  const contacted = new Date(lead.updated_at || lead.created_at).getTime();\n  const daysSince = Math.floor((now - contacted) / DAY);\n\n  if (daysSince >= 3 && !lead.notes?.includes('followup_3')) {\n    // Day 3: Follow-up email\n    actions.push({\n      ...lead,\n      followup_step: 3,\n      action: 'email',\n      subject: `Following up — PM Travel Agency Partnership`,\n      message: `Hi ${lead.name || 'Partner'},\\n\\nJust wanted to follow up on my earlier message about a potential partnership.\\n\\nWe've helped 50+ agencies worldwide offer Morocco tours to their clients. I'd love to share our B2B catalog.\\n\\nWould you have 5 minutes for a quick chat this week?\\n\\nBest,\\nPM Travel Agency`\n    });\n  } else if (daysSince >= 2 && !lead.notes?.includes('followup_2')) {\n    // Day 2: WhatsApp\n    if (lead.phone) {\n      actions.push({\n        ...lead,\n        followup_step: 2,\n        action: 'whatsapp',\n        message: `Hi ${lead.name || 'Partner'} 👋\\n\\nPM Travel Agency here. Did you get a chance to see our email about B2B Morocco tours?\\n\\nI can send you our catalog + rates right away if interested! 😊`\n      });\n    }\n  } else if (daysSince >= 1 && !lead.notes?.includes('followup_1')) {\n    // Day 1: Email\n    actions.push({\n      ...lead,\n      followup_step: 1,\n      action: 'email',\n      subject: `Quick follow-up — Morocco tours`,\n      message: `Hello ${lead.name || 'Partner'},\\n\\nI reached out yesterday about partnering for Morocco travel experiences.\\n\\nJust checking if this is something you'd be interested in exploring?\\n\\nHappy to answer any questions!\\n\\nBest regards,\\nPM Travel Agency`\n    });\n  }\n}\n\nreturn actions.map(a => ({ json: a }));"
+      },
+      "id": "determine-followup",
+      "name": "Determine Follow-Up Step",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{ "value1": "={{$json.action}}", "value2": "email" }]
+        }
+      },
+      "id": "route-action",
+      "name": "Route: Email or WhatsApp?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [860, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "b2b@pm-travelagency.cloud",
+        "toEmail": "={{$json.email}}",
+        "subject": "={{$json.subject}}",
+        "text": "={{$json.message}}",
+        "options": { "replyTo": "b2b@pm-travelagency.cloud" }
+      },
+      "id": "send-followup-email",
+      "name": "Send Follow-Up Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1100, 200],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "Hostinger SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.facebook.com/v18.0/{{$env.WHATSAPP_PHONE_NUMBER_ID}}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{$env.WHATSAPP_ACCESS_TOKEN}}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{$json.phone}}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": \"{{$json.message}}\" }\n}"
+      },
+      "id": "send-followup-wa",
+      "name": "Send Follow-Up WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1100, 430]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CRM_URL}}/api/n8n/update",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"email\": \"{{$json.email}}\", \"event\": \"followup_{{$json.followup_step}}\", \"notes\": \"{{($json.notes || '') + ' followup_' + $json.followup_step}}\"}"
+      },
+      "id": "update-crm",
+      "name": "Update CRM with Follow-Up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1320, 300]
+    }
+  ],
+  "connections": {
+    "Check Every 12h": { "main": [[{ "node": "Fetch Contacted Leads", "type": "main", "index": 0 }]] },
+    "Fetch Contacted Leads": { "main": [[{ "node": "Determine Follow-Up Step", "type": "main", "index": 0 }]] },
+    "Determine Follow-Up Step": { "main": [[{ "node": "Route: Email or WhatsApp?", "type": "main", "index": 0 }]] },
+    "Route: Email or WhatsApp?": { "main": [[{ "node": "Send Follow-Up Email", "type": "main", "index": 0 }], [{ "node": "Send Follow-Up WhatsApp", "type": "main", "index": 0 }]] },
+    "Send Follow-Up Email": { "main": [[{ "node": "Update CRM with Follow-Up", "type": "main", "index": 0 }]] },
+    "Send Follow-Up WhatsApp": { "main": [[{ "node": "Update CRM with Follow-Up", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "follow-up" }, { "name": "automation" }]
+}

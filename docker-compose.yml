@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  crm:
+    build: .
+    container_name: pm-travel-crm
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      # Single persistent volume for ALL data (DB + uploads + exports + backups)
+      # ⚠️  The old config also mounted crm_db:/app/server which overlays the server
+      #     code with a stale snapshot after every rebuild — that was a root cause of 502s.
+      - crm_data:/app/data
+    labels:
+      # Traefik / Dokploy — tells the reverse proxy which internal port to route to
+      - "traefik.enable=true"
+      - "traefik.http.services.pm-travel-crm.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health', (r) => { process.exit(r.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  crm_data:

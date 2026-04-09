@@ -1,0 +1,128 @@
+{
+  "name": "5. CRM Sync — Bi-directional Data Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 1 }] }
+      },
+      "id": "schedule",
+      "name": "Sync Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "crm-sync",
+        "responseMode": "onReceived"
+      },
+      "id": "manual-trigger",
+      "name": "Manual Sync Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.CRM_URL}}/api/n8n/stats",
+        "options": {}
+      },
+      "id": "fetch-stats",
+      "name": "Fetch CRM Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.CRM_URL}}/api/n8n/leads?status=new&limit=100",
+        "options": {}
+      },
+      "id": "fetch-new-leads",
+      "name": "Fetch New Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.CRM_URL}}/api/queue/status",
+        "options": {}
+      },
+      "id": "fetch-queue",
+      "name": "Fetch Email Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [660, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build sync report\nconst stats = $('Fetch CRM Stats').first().json;\nconst newLeads = $('Fetch New Leads').first().json;\nconst queue = $('Fetch Email Queue').first().json;\n\nconst report = {\n  timestamp: new Date().toISOString(),\n  total_leads: stats.total_leads || 0,\n  new_leads: (newLeads.leads || []).length,\n  qualified: stats.qualified || 0,\n  contacted: stats.contacted || 0,\n  converted: stats.converted || 0,\n  email_queue: {\n    pending: queue.pending || 0,\n    sent: queue.sent || 0,\n    failed: queue.failed || 0\n  },\n  sources: {\n    google_maps: stats.from_google_maps || 0,\n    linkedin: stats.from_linkedin || 0,\n    directory: stats.from_directory || 0,\n    competitor: stats.from_competitor || 0,\n    lead_magnet: stats.from_lead_magnet || 0\n  },\n  alerts: []\n};\n\n// Check for alerts\nif (report.email_queue.failed > 10) {\n  report.alerts.push('⚠️ High email failure rate detected');\n}\nif (report.new_leads > 50) {\n  report.alerts.push('📊 Large batch of new leads — consider scoring and qualification');\n}\nif (report.email_queue.pending > 100) {\n  report.alerts.push('📬 Email queue backlog — check SMTP health');\n}\n\nreturn [{ json: report }];"
+      },
+      "id": "build-report",
+      "name": "Build Sync Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{$json.alerts.length}}", "operation": "larger", "value2": 0 }]
+        }
+      },
+      "id": "has-alerts",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "b2b@pm-travelagency.cloud",
+        "toEmail": "={{$env.ADMIN_EMAIL || 'b2b@pm-travelagency.cloud'}}",
+        "subject": "=CRM Sync Alert — {{$json.alerts.length}} issue(s) detected",
+        "html": "=<div style=\"font-family:Arial; padding:20px;\">\n<h2>🤖 CRM Sync Report</h2>\n<p><b>Time:</b> {{$json.timestamp}}</p>\n<h3>Leads</h3>\n<ul>\n<li>Total: {{$json.total_leads}}</li>\n<li>New: {{$json.new_leads}}</li>\n<li>Qualified: {{$json.qualified}}</li>\n<li>Contacted: {{$json.contacted}}</li>\n<li>Converted: {{$json.converted}}</li>\n</ul>\n<h3>Email Queue</h3>\n<ul>\n<li>Pending: {{$json.email_queue.pending}}</li>\n<li>Sent: {{$json.email_queue.sent}}</li>\n<li>Failed: {{$json.email_queue.failed}}</li>\n</ul>\n<h3 style=\"color:red;\">⚠️ Alerts</h3>\n<ul>{{$json.alerts.map(a => '<li>' + a + '</li>').join('')}}</ul>\n</div>",
+        "options": {}
+      },
+      "id": "send-alert-email",
+      "name": "Send Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1320, 300],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "Hostinger SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CRM_URL}}/api/n8n/webhook",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"type\": \"sync_complete\", \"data\": {{JSON.stringify($json)}}}"
+      },
+      "id": "log-sync",
+      "name": "Log Sync Event in CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1320, 500]
+    }
+  ],
+  "connections": {
+    "Sync Every Hour": { "main": [[{ "node": "Fetch CRM Stats", "type": "main", "index": 0 }]] },
+    "Manual Sync Trigger": { "main": [[{ "node": "Fetch CRM Stats", "type": "main", "index": 0 }]] },
+    "Fetch CRM Stats": { "main": [[{ "node": "Fetch New Leads", "type": "main", "index": 0 }, { "node": "Fetch Email Queue", "type": "main", "index": 0 }]] },
+    "Fetch New Leads": { "main": [[{ "node": "Build Sync Report", "type": "main", "index": 0 }]] },
+    "Fetch Email Queue": { "main": [[{ "node": "Build Sync Report", "type": "main", "index": 0 }]] },
+    "Build Sync Report": { "main": [[{ "node": "Has Alerts?", "type": "main", "index": 0 }]] },
+    "Has Alerts?": { "main": [[{ "node": "Send Alert Email", "type": "main", "index": 0 }], [{ "node": "Log Sync Event in CRM", "type": "main", "index": 0 }]] },
+    "Send Alert Email": { "main": [[{ "node": "Log Sync Event in CRM", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "sync" }, { "name": "monitoring" }]
+}

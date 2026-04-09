@@ -1,0 +1,13 @@
+node_modules
+server/node_modules
+server/database.sqlite
+.env
+.git
+.gitignore
+*.log
+debug_output*.txt
+smtp_check.txt
+.DS_Store
+Thumbs.db
+README*.txt
+tools/

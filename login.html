@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PM Travel CRM - Sign In</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="login.css">
+</head>
+
+<body>
+    <!-- Main Login Page -->
+    <div id="loginPage" class="auth-container login-page">
+        <!-- Left Side - Branding -->
+        <div class="auth-left">
+            <div class="brand-card">
+                <div class="brand-logo">
+                    <div class="brand-icon">
+                        <i class="fa-solid fa-plane-departure"></i>
+                    </div>
+                    <h1>PM Travel CRM</h1>
+                </div>
+
+                <h2>PM Travel Agency CRM</h2>
+                <p>Luxury travel • Quotes • Bookings • B2B Partners</p>
+
+                <ul class="brand-features">
+                    <li><i class="fa-solid fa-circle-check"></i> Luxury travel</li>
+                    <li><i class="fa-solid fa-circle-check"></i> Quotes</li>
+                    <li><i class="fa-solid fa-circle-check"></i> Bookings</li>
+                    <li><i class="fa-solid fa-circle-check"></i> B2B Partners</li>
+                </ul>
+
+                <div class="brand-footer">
+                    © 2024 PM Travel CRM. All rights reserved. Part of the Elite Travel Network.
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side - Login Form -->
+        <div class="auth-right">
+            <a href="#" class="help-link">Help Center</a>
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                <i class="fa-regular fa-moon"></i>
+            </button>
+
+            <div class="auth-form-container">
+                <div class="auth-header">
+                    <h1>Welcome back</h1>
+                    <p>Please enter your details to sign in.</p>
+                </div>
+
+                <!-- Tabs -->
+                <div class="auth-tabs">
+                    <button class="auth-tab active" onclick="showTab('login')">Login</button>
+                    <button class="auth-tab" onclick="showTab('create')">Create Account</button>
+                </div>
+
+                <!-- Error Message -->
+                <div id="errorMessage" class="error-message"></div>
+
+                <!-- Login Form -->
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label>Email address</label>
+                        <div class="form-input-wrapper">
+                            <i class="fa-regular fa-envelope"></i>
+                            <input type="email" class="form-control" id="loginEmail"
+                                placeholder="e.g. agent@travelcrm.com" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Password</label>
+                        <div class="form-input-wrapper password-wrapper">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" class="form-control" id="loginPassword" placeholder="••••••••"
+                                required>
+                            <button type="button" class="password-toggle" onclick="togglePassword('loginPassword')">
+                                <i class="fa-regular fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="checkbox-wrapper">
+                            <input type="checkbox" id="rememberMe">
+                            <label for="rememberMe">Remember me for 30 days</label>
+                        </div>
+                        <a href="#" class="auth-link" onclick="showPage('forgot'); return false;">Forgot password?</a>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        Sign In <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+
+                <div class="divider">OR CONTINUE WITH</div>
+
+                <!-- Social Login -->
+                <div class="social-grid">
+                    <button class="btn-social google" onclick="socialLogin('google')">
+                        <i class="fa-brands fa-google"></i> Google
+                    </button>
+                    <button class="btn-social apple" onclick="socialLogin('apple')">
+                        <i class="fa-brands fa-apple"></i> Apple
+                    </button>
+                    <button class="btn-social facebook" onclick="socialLogin('facebook')">
+                        <i class="fa-brands fa-facebook"></i> Facebook
+                    </button>
+                    <button class="btn-social linkedin" onclick="socialLogin('linkedin')">
+                        <i class="fa-brands fa-linkedin"></i> LinkedIn
+                    </button>
+                </div>
+
+                <div class="auth-footer">
+                    Don't have an account yet? <a href="#" class="auth-link"
+                        onclick="showTab('create'); return false;">Request Partner Access</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Account Page -->
+    <div id="createPage" class="auth-container signup-page" style="display: none;">
+        <!-- Left Side - Branding -->
+        <div class="auth-left">
+            <div class="brand-card">
+                <div class="brand-logo">
+                    <div class="brand-icon">
+                        <i class="fa-solid fa-user-plus"></i>
+                    </div>
+                    <h1>PM Travel CRM</h1>
+                </div>
+
+                <h2>Designed for the world's most elite agencies.</h2>
+                <p>Join a network of luxury travel professionals leveraging intelligent automation to deliver
+                    unparalleled client experiences.</p>
+
+                <div class="brand-footer">
+                    © 2024 PM Travel Systems LLC • Privacy Policy
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side - Signup Form -->
+        <div class="auth-right">
+            <a href="#" class="help-link">Help Center</a>
+
+            <div class="auth-form-container">
+                <div class="auth-header">
+                    <h1>Create Account</h1>
+                    <p>Elevate your agency's potential.</p>
+                </div>
+
+                <!-- Tabs -->
+                <div class="auth-tabs">
+                    <button class="auth-tab" onclick="showTab('login')">Login</button>
+                    <button class="auth-tab active" onclick="showTab('create')">Create Account</button>
+                </div>
+
+                <!-- Error Message -->
+                <div id="createErrorMessage" class="error-message"></div>
+
+                <!-- Create Account Form -->
+                <form id="createForm">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="form-group">
+                            <label>Company Name</label>
+                            <div class="form-input-wrapper">
+                                <i class="fa-solid fa-building"></i>
+                                <input type="text" class="form-control" id="companyName" placeholder="Agency Luxe"
+                                    required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Full Name</label>
+                            <div class="form-input-wrapper">
+                                <i class="fa-solid fa-user"></i>
+                                <input type="text" class="form-control" id="fullName" placeholder="Julian Voss"
+                                    required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="form-group">
+                            <label>Work Email</label>
+                            <div class="form-input-wrapper">
+                                <i class="fa-regular fa-envelope"></i>
+                                <input type="email" class="form-control" id="workEmail"
+                                    placeholder="julian@agencyluxe.com" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Phone Number</label>
+                            <div class="form-input-wrapper">
+                                <i class="fa-solid fa-phone"></i>
+                                <input type="tel" class="form-control" id="phoneNumber" placeholder="+1 (555) 000-0000"
+                                    required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Country / Region</label>
+                        <div class="form-input-wrapper">
+                            <i class="fa-solid fa-globe"></i>
+                            <div class="select-wrap">
+                                <select class="form-control" id="country" required style="padding-left: 48px;">
+                                    <option value="">Select your country</option>
+                                    <option value="US">United States</option>
+                                    <option value="UK">United Kingdom</option>
+                                    <option value="CA">Canada</option>
+                                    <option value="AU">Australia</option>
+                                    <option value="FR">France</option>
+                                    <option value="DE">Germany</option>
+                                    <option value="ES">Spain</option>
+                                    <option value="IT">Italy</option>
+                                </select>
+                                <i class="fa-solid fa-chevron-down caret"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div class="form-group">
+                            <label>Password</label>
+                            <div class="form-input-wrapper password-wrapper">
+                                <i class="fa-solid fa-lock"></i>
+                                <input type="password" class="form-control" id="createPassword" placeholder="••••••••••"
+                                    required>
+                                <button type="button" class="password-toggle"
+                                    onclick="togglePassword('createPassword')">
+                                    <i class="fa-regular fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Confirm Password</label>
+                            <div class="form-input-wrapper password-wrapper">
+                                <i class="fa-solid fa-lock"></i>
+                                <input type="password" class="form-control" id="confirmPassword" placeholder="••••••••"
+                                    required>
+                                <button type="button" class="password-toggle"
+                                    onclick="togglePassword('confirmPassword')">
+                                    <i class="fa-regular fa-eye"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Password Strength Indicator -->
+                    <div class="password-strength">
+                        <div class="strength-label">
+                            <span style="color: var(--text-secondary); font-size: 13px;">Password Strength:</span>
+                            <span class="strength-text" id="strengthText">Strong</span>
+                        </div>
+                        <div class="strength-bar">
+                            <div class="strength-progress strong" id="strengthBar"></div>
+                        </div>
+                        <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">8+ chars, numbers,
+                            symbols</p>
+                    </div>
+
+                    <div class="checkbox-wrapper">
+                        <input type="checkbox" id="agreeTerms" required>
+                        <label for="agreeTerms">I agree to the <a href="#" class="auth-link">Terms of Service</a> and <a
+                                href="#" class="auth-link">Privacy Policy</a>.</label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        Create Account <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+
+                <div class="auth-footer">
+                    Already have an account? <a href="#" class="auth-link" onclick="showTab('login'); return false;">Log
+                        in here</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Forgot Password Page -->
+    <div id="forgotPage" class="auth-container forgot-page" style="display: none;">
+        <!-- Left Side - Branding -->
+        <div class="auth-left">
+            <div class="brand-card">
+                <div class="brand-logo">
+                    <div class="brand-icon">
+                        <i class="fa-solid fa-key"></i>
+                    </div>
+                    <h1>PM Travel CRM</h1>
+                </div>
+
+                <h2>Forgot password?</h2>
+                <p>No worries, we'll send you reset instructions.</p>
+
+                <div class="brand-footer">
+                    TRUSTED BY GLOBAL AGENCIES
+                    <div class="trust-badges">
+                        <div class="trust-badge"></div>
+                        <div class="trust-badge"></div>
+                        <div class="trust-badge"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side - Reset Form -->
+        <div class="auth-right">
+            <div class="auth-form-container" style="max-width: 420px;">
+                <a href="#" class="back-link" onclick="showPage('login'); return false;">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Login
+                </a>
+
+                <div class="auth-header">
+                    <h1>Forgot password?</h1>
+                    <p>No worries, we'll send you reset instructions.</p>
+                </div>
+
+                <!-- Success Message -->
+                <div id="forgotSuccess" class="success-message" style="display: none;">
+                    Reset link sent! Check your inbox.
+                </div>
+
+                <!-- Error Message -->
+                <div id="forgotErrorMessage" class="error-message"></div>
+
+                <form id="forgotForm">
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <div class="form-input-wrapper">
+                            <i class="fa-regular fa-envelope"></i>
+                            <input type="email" class="form-control" id="forgotEmail"
+                                placeholder="alex@luxury-travel.com" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        Send Reset Link <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+
+                <div class="auth-footer">
+                    <a href="#" class="back-link" onclick="showPage('login'); return false;">
+                        <i class="fa-solid fa-arrow-left"></i> Back to Login
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Set New Password Page -->
+    <div id="resetPage" class="auth-container reset-page" style="display: none;">
+        <!-- Left Side - Branding -->
+        <div class="auth-left">
+            <div class="brand-card">
+                <div class="brand-logo">
+                    <div class="brand-icon">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+                    <h1>PM Travel CRM</h1>
+                </div>
+
+                <h2>Elevating Travel Management Excellence</h2>
+                <p>Access our premium global network of luxury hospitality providers. Secure, fast, and intuitive tools
+                    designed for the modern travel professional.</p>
+
+                <div class="brand-footer">
+                    © 2024 PM Travel Systems LLC • Privacy Policy
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side - New Password Form -->
+        <div class="auth-right">
+            <div class="auth-form-container" style="max-width: 420px;">
+                <a href="#" class="back-link" onclick="showPage('login'); return false;">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Secure Login
+                </a>
+
+                <div class="auth-header">
+                    <h1>Set New Password</h1>
+                    <p>Your security is our priority. Please choose a strong password to protect your account.</p>
+                </div>
+
+                <!-- Error Message -->
+                <div id="resetErrorMessage" class="error-message"></div>
+
+                <form id="resetForm">
+                    <div class="form-group">
+                        <label>New Password</label>
+                        <div class="form-input-wrapper password-wrapper">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" class="form-control" id="newPassword" placeholder="Min 8 characters"
+                                required>
+                            <button type="button" class="password-toggle" onclick="togglePassword('newPassword')">
+                                <i class="fa-regular fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Confirm New Password</label>
+                        <div class="form-input-wrapper password-wrapper">
+                            <i class="fa-solid fa-lock"></i>
+                            <input type="password" class="form-control" id="confirmNewPassword"
+                                placeholder="Re-enter password" required>
+                            <button type="button" class="password-toggle"
+                                onclick="togglePassword('confirmNewPassword')">
+                                <i class="fa-regular fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Password Strength -->
+                    <div class="password-strength">
+                        <div class="strength-label">
+                            <span style="color: var(--text-secondary); font-size: 13px;">Security Strength:</span>
+                            <span class="strength-text strong" id="resetStrengthText">85% <span
+                                    style="font-weight: 400;">Secure</span></span>
+                        </div>
+                        <div class="strength-bar">
+                            <div class="strength-progress strong" id="resetStrengthBar"></div>
+                        </div>
+                    </div>
+
+                    <!-- Password Requirements Checklist -->
+                    <div class="password-requirements">
+                        <h4>Security Strength:</h4>
+                        <div class="requirement met" id="req-length">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <span>At least 8 characters long</span>
+                        </div>
+                        <div class="requirement met" id="req-special">
+                            <i class="fa-solid fa-circle-check"></i>
+                            <span>Includes a special character or number</span>
+                        </div>
+                        <div class="requirement" id="req-case">
+                            <i class="fa-regular fa-circle"></i>
+                            <span>Mix of uppercase & lowercase letters</span>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary" style="margin-top: 24px;">
+                        Update Password <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+
+                <!-- Security Badges -->
+                <div class="security-badges">
+                    <div class="badge">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span>SSL SECURE</span>
+                    </div>
+                    <div class="badge">
+                        <i class="fa-solid fa-lock"></i>
+                        <span>256-BIT AES</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="store.js"></script>
+    <script src="modules/auth.js"></script>
+
+    <!-- JavaScript -->
+    <script>
+        // Page Navigation
+        function showPage(page) {
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('createPage').style.display = 'none';
+            document.getElementById('forgotPage').style.display = 'none';
+            document.getElementById('resetPage').style.display = 'none';
+
+            if (page === 'login') {
+                document.getElementById('loginPage').style.display = 'grid';
+            } else if (page === 'create') {
+                document.getElementById('createPage').style.display = 'grid';
+            } else if (page === 'forgot') {
+                document.getElementById('forgotPage').style.display = 'grid';
+            } else if (page === 'reset') {
+                document.getElementById('resetPage').style.display = 'grid';
+            }
+        }
+
+        // Tab Switching (Login / Create Account)
+        function showTab(tab) {
+            if (tab === 'login') {
+                showPage('login');
+            } else if (tab === 'create') {
+                showPage('create');
+            }
+        }
+
+        // Password Toggle
+        function togglePassword(fieldId) {
+            const field = document.getElementById(fieldId);
+            const button = field.nextElementSibling;
+            const icon = button.querySelector('i');
+
+            if (field.type === 'password') {
+                field.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                field.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        }
+
+        // Password Strength Checker
+        function checkPasswordStrength(password) {
+            let strength = 0;
+            if (password.length >= 8) strength += 25;
+            if (password.length >= 12) strength += 25;
+            if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength += 25;
+            if (/[0-9]/.test(password)) strength += 15;
+            if (/[^a-zA-Z0-9]/.test(password)) strength += 10;
+
+            return Math.min(strength, 100);
+        }
+
+        function updatePasswordStrength(passwordField, strengthText, strengthBar) {
+            const password = document.getElementById(passwordField).value;
+            const strength = checkPasswordStrength(password);
+
+            const textEl = document.getElementById(strengthText);
+            const barEl = document.getElementById(strengthBar);
+
+            if (strength < 40) {
+                textEl.textContent = 'Weak';
+                textEl.className = 'strength-text weak';
+                barEl.className = 'strength-progress weak';
+            } else if (strength < 70) {
+                textEl.textContent = 'Medium';
+                textEl.className = 'strength-text medium';
+                barEl.className = 'strength-progress medium';
+            } else {
+                textEl.textContent = 'Strong';
+                textEl.className = 'strength-text strong';
+                barEl.className = 'strength-progress strong';
+            }
+        }
+
+        // Password Requirements Checker
+        function checkPasswordRequirements(password) {
+            const reqLength = document.getElementById('req-length');
+            const reqSpecial = document.getElementById('req-special');
+            const reqCase = document.getElementById('req-case');
+
+            // Length
+            if (password.length >= 8) {
+                reqLength.classList.add('met');
+                reqLength.querySelector('i').className = 'fa-solid fa-circle-check';
+            } else {
+                reqLength.classList.remove('met');
+                reqLength.querySelector('i').className = 'fa-regular fa-circle';
+            }
+
+            // Special char or number
+            if (/[0-9]/.test(password) || /[^a-zA-Z0-9]/.test(password)) {
+                reqSpecial.classList.add('met');
+                reqSpecial.querySelector('i').className = 'fa-solid fa-circle-check';
+            } else {
+                reqSpecial.classList.remove('met');
+                reqSpecial.querySelector('i').className = 'fa-regular fa-circle';
+            }
+
+            // Mixed case
+            if (/[a-z]/.test(password) && /[A-Z]/.test(password)) {
+                reqCase.classList.add('met');
+                reqCase.querySelector('i').className = 'fa-solid fa-circle-check';
+            } else {
+                reqCase.classList.remove('met');
+                reqCase.querySelector('i').className = 'fa-regular fa-circle';
+            }
+        }
+
+        // Social Login (Mock)
+        function socialLogin(provider) {
+            const btn = event.target.closest('.btn-social');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i>';
+            btn.classList.add('loading');
+
+            setTimeout(() => {
+                alert(`${provider.charAt(0).toUpperCase() + provider.slice(1)} login would be processed here. Redirecting to dashboard...`);
+                localStorage.setItem('auth', 'true');
+                localStorage.setItem('currentUser', JSON.stringify({
+                    id: Date.now(),
+                    name: provider.charAt(0).toUpperCase() + provider.slice(1) + ' User',
+                    email: provider + '.user@example.com',
+                    role: 'agent',
+                    authProvider: provider,
+                    linkedAccounts: [],
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(provider + ' User')}&background=0D8ABC&color=fff`
+                }));
+                window.location.href = 'index.html';
+            }, 1500);
+        }
+
+        // Theme Toggle (shared key with the main app)
+        function toggleTheme() {
+            const key = 'pm_crm_theme_v1';
+            const current = document.body.getAttribute('data-theme') || localStorage.getItem(key) || 'light';
+            const next = current === 'light' ? 'dark' : 'light';
+            document.body.setAttribute('data-theme', next);
+            try { localStorage.setItem(key, next); } catch (_) { }
+        }
+
+        // Apply saved theme at startup
+        try {
+            const saved = localStorage.getItem('pm_crm_theme_v1');
+            if (saved === 'dark' || saved === 'light') document.body.setAttribute('data-theme', saved);
+        } catch (_) { }
+
+        // Form Handlers
+        document.addEventListener('DOMContentLoaded', () => {
+            // Login Form
+            document.getElementById('loginForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const email = document.getElementById('loginEmail').value;
+                const password = document.getElementById('loginPassword').value;
+
+                // Use the shared Auth module (supports admin/manager/agent demo accounts + lockout)
+                if (window.Auth && typeof Auth.login === 'function') {
+                    const result = Auth.login(email, password);
+                    if (result && result.success) {
+                        window.location.href = 'index.html';
+                        return;
+                    }
+                    const errorEl = document.getElementById('errorMessage');
+                    errorEl.textContent = (result && result.message) ? result.message : 'Invalid credentials';
+                    errorEl.classList.add('show');
+                    return;
+                }
+
+                const errorEl = document.getElementById('errorMessage');
+                errorEl.textContent = 'Auth module not loaded';
+                errorEl.classList.add('show');
+            });
+
+            // Create Account Form
+            document.getElementById('createForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const password = document.getElementById('createPassword').value;
+                const confirm = document.getElementById('confirmPassword').value;
+
+                if (password !== confirm) {
+                    const errorEl = document.getElementById('createErrorMessage');
+                    errorEl.textContent = 'Passwords do not match';
+                    errorEl.classList.add('show');
+                    return;
+                }
+
+                alert('Account created successfully! Redirecting to login...');
+                showPage('login');
+            });
+
+            // Forgot Password Form
+            document.getElementById('forgotForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                document.getElementById('forgotSuccess').style.display = 'block';
+                setTimeout(() => {
+                    showPage('login');
+                }, 2000);
+            });
+
+            // Reset Password Form
+            document.getElementById('resetForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newPass = document.getElementById('newPassword').value;
+                const confirmPass = document.getElementById('confirmNewPassword').value;
+
+                if (newPass !== confirmPass) {
+                    const errorEl = document.getElementById('resetErrorMessage');
+                    errorEl.textContent = 'Passwords do not match';
+                    errorEl.classList.add('show');
+                    return;
+                }
+
+                alert('Password updated successfully! Redirecting to login...');
+                showPage('login');
+            });
+
+            // Password Strength Listeners
+            const createPasswordField = document.getElementById('createPassword');
+            if (createPasswordField) {
+                createPasswordField.addEventListener('input', () => {
+                    updatePasswordStrength('createPassword', 'strengthText', 'strengthBar');
+                });
+            }
+
+            const newPasswordField = document.getElementById('newPassword');
+            if (newPasswordField) {
+                newPasswordField.addEventListener('input', () => {
+                    updatePasswordStrength('newPassword', 'resetStrengthText', 'resetStrengthBar');
+                    checkPasswordRequirements(newPasswordField.value);
+                });
+            }
+
+            // Check for reset token in URL
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('reset')) {
+                showPage('reset');
+            }
+        });
+    </script>
+</body>
+
+</html>

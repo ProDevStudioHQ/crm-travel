@@ -1,0 +1,154 @@
+{
+  "name": "1. Lead Scraper — B2B Travel Agency Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-scraper",
+        "responseMode": "onReceived",
+        "responseData": "allEntries"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://maps.googleapis.com/maps/api/place/textsearch/json?query={{$json.keyword}}&key={{$env.GOOGLE_PLACES_API_KEY}}",
+        "options": {}
+      },
+      "id": "google-places-search",
+      "name": "Google Places Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [420, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.google.com/search?q={{encodeURIComponent($json.keyword + ' email contact')}}&num=20",
+        "options": {
+          "response": { "response": { "fullResponse": true } }
+        },
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+          ]
+        }
+      },
+      "id": "google-search-fallback",
+      "name": "Google Search (Fallback)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [420, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract results from Google Places API\nconst results = items[0].json.results || [];\nreturn results.map(r => ({\n  json: {\n    name: r.name || '',\n    address: r.formatted_address || '',\n    rating: r.rating || 0,\n    website: '',\n    phone: '',\n    email: '',\n    source: 'google_maps',\n    place_id: r.place_id\n  }\n}));"
+      },
+      "id": "parse-places",
+      "name": "Parse Places Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [640, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://maps.googleapis.com/maps/api/place/details/json?place_id={{$json.place_id}}&fields=website,formatted_phone_number,name&key={{$env.GOOGLE_PLACES_API_KEY}}",
+        "options": {}
+      },
+      "id": "get-place-details",
+      "name": "Get Place Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [860, 200]
+    },
+    {
+      "parameters": {
+        "url": "={{$json.result?.website}}",
+        "options": {
+          "response": { "response": { "fullResponse": true } }
+        },
+        "headerParameters": {
+          "parameters": [
+            { "name": "User-Agent", "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }
+          ]
+        }
+      },
+      "id": "visit-website",
+      "name": "Visit Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1080, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract emails from HTML page body\nconst html = items[0].json.body || items[0].json.data || '';\nconst emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\nconst emails = [...new Set((html.match(emailRegex) || []))];\n\n// Filter out common junk emails\nconst junk = ['noreply', 'no-reply', 'support@', 'webmaster@', 'admin@', 'info@wordpress', 'wix.com', 'example.com'];\nconst filtered = emails.filter(e => !junk.some(j => e.toLowerCase().includes(j)));\n\n// Prefer contact/info emails\nconst prioritized = filtered.sort((a, b) => {\n  const scoreA = a.includes('contact') || a.includes('info') || a.includes('hello') ? 0 : 1;\n  const scoreB = b.includes('contact') || b.includes('info') || b.includes('hello') ? 0 : 1;\n  return scoreA - scoreB;\n});\n\nreturn [{ json: { emails: prioritized, bestEmail: prioritized[0] || '' } }];"
+      },
+      "id": "extract-emails",
+      "name": "Extract Emails from HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1300, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the final lead object\nconst prev = $('Get Place Details').first().json;\nconst emailData = $('Extract Emails from HTML').first().json;\nconst original = $('Parse Places Results').first().json;\n\nconst lead = {\n  name: prev?.result?.name || original?.name || '',\n  email: emailData?.bestEmail || '',\n  company: prev?.result?.name || original?.name || '',\n  phone: prev?.result?.formatted_phone_number || '',\n  country: '',\n  website: prev?.result?.website || '',\n  source: 'google_maps'\n};\n\n// Only pass if we found an email\nif (!lead.email) return [];\n\nreturn [{ json: lead }];"
+      },
+      "id": "build-lead",
+      "name": "Build Lead Object",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1520, 200]
+    },
+    {
+      "parameters": {
+        "operation": "removeDuplicates",
+        "duplicateField": "email"
+      },
+      "id": "dedup",
+      "name": "Remove Duplicates",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 1,
+      "position": [1740, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.callback || $env.CRM_URL + '/api/n8n/leads'}}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "={{$json}}", "value": "" }
+          ]
+        },
+        "jsonBody": "={{JSON.stringify($json)}}",
+        "options": {}
+      },
+      "id": "send-to-crm",
+      "name": "Send to CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1960, 200]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Google Places Search", "type": "main", "index": 0 }, { "node": "Google Search (Fallback)", "type": "main", "index": 0 }]] },
+    "Google Places Search": { "main": [[{ "node": "Parse Places Results", "type": "main", "index": 0 }]] },
+    "Parse Places Results": { "main": [[{ "node": "Get Place Details", "type": "main", "index": 0 }]] },
+    "Get Place Details": { "main": [[{ "node": "Visit Website", "type": "main", "index": 0 }]] },
+    "Visit Website": { "main": [[{ "node": "Extract Emails from HTML", "type": "main", "index": 0 }]] },
+    "Extract Emails from HTML": { "main": [[{ "node": "Build Lead Object", "type": "main", "index": 0 }]] },
+    "Build Lead Object": { "main": [[{ "node": "Remove Duplicates", "type": "main", "index": 0 }]] },
+    "Remove Duplicates": { "main": [[{ "node": "Send to CRM", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "lead-generation" },
+    { "name": "scraping" }
+  ]
+}

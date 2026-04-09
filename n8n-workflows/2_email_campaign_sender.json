@@ -1,0 +1,121 @@
+{
+  "name": "2. Email Campaign Sender (Hostinger SMTP)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-email-campaign",
+        "responseMode": "onReceived"
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule (Every 6h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [200, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.CRM_URL}}/api/n8n/leads/qualified",
+        "options": {}
+      },
+      "id": "fetch-leads",
+      "name": "Fetch Qualified Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [440, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare email batch — max 100/day as per anti-spam SOP\nconst leads = items[0].json.leads || [];\nconst MAX_BATCH = 100;\nconst batch = leads.slice(0, MAX_BATCH);\n\nreturn batch.map(lead => ({\n  json: {\n    to: lead.email,\n    name: lead.name || 'Partner',\n    company: lead.company || '',\n    country: lead.country || '',\n    subject: `Partnership Opportunity — PM Travel Agency, Morocco`,\n    html: `<div style=\"font-family:Arial,sans-serif; max-width:600px; margin:0 auto; padding:30px;\">\n  <h2 style=\"color:#1a1a2e;\">Hello ${lead.name || 'Partner'} 👋</h2>\n  <p>I'm reaching out from <b>PM Travel Agency</b>, a DMC based in Marrakech, Morocco.</p>\n  <p>We specialize in crafting authentic Moroccan experiences — from luxury riads to Sahara adventures — and we're looking for <b>B2B partners</b> like ${lead.company || 'your agency'} to collaborate on 2026 departures.</p>\n  <h3 style=\"color:#ff6d00;\">What we offer:</h3>\n  <ul>\n    <li>✅ Competitive B2B rates</li>\n    <li>✅ Custom itineraries (luxury, adventure, culture)</li>\n    <li>✅ 24/7 local support</li>\n    <li>✅ Private transfers & guides</li>\n  </ul>\n  <p>Would you be interested in receiving our <b>B2B catalog and rate card</b>?</p>\n  <p>Looking forward to hearing from you.</p>\n  <p style=\"margin-top:30px;\">Best regards,<br><b>PM Travel Agency</b><br>Marrakech, Morocco<br>📧 b2b@pm-travelagency.cloud</p>\n</div>`\n  }\n}));"
+      },
+      "id": "prepare-emails",
+      "name": "Prepare Email Batch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": { "reset": false }
+      },
+      "id": "batch-split",
+      "name": "Process One by One",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 2,
+      "position": [880, 400]
+    },
+    {
+      "parameters": {
+        "amount": "={{Math.floor(Math.random() * 3000) + 2000}}",
+        "unit": "milliseconds"
+      },
+      "id": "anti-spam-delay",
+      "name": "Anti-Spam Delay (2-5s)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "fromEmail": "b2b@pm-travelagency.cloud",
+        "toEmail": "={{$json.to}}",
+        "subject": "={{$json.subject}}",
+        "html": "={{$json.html}}",
+        "options": {
+          "replyTo": "b2b@pm-travelagency.cloud",
+          "appendAttribution": false
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email (SMTP)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1320, 400],
+      "credentials": {
+        "smtp": {
+          "id": "REPLACE_WITH_YOUR_SMTP_CREDENTIAL_ID",
+          "name": "Hostinger SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.CRM_URL}}/api/n8n/update",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"email\": \"{{$json.to}}\", \"status\": \"contacted\", \"event\": \"email_sent\", \"campaign_id\": \"n8n_campaign_{{new Date().toISOString().split('T')[0]}}\"}"
+      },
+      "id": "update-crm",
+      "name": "Update CRM Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [1540, 400]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": { "main": [[{ "node": "Fetch Qualified Leads", "type": "main", "index": 0 }]] },
+    "Schedule (Every 6h)": { "main": [[{ "node": "Fetch Qualified Leads", "type": "main", "index": 0 }]] },
+    "Fetch Qualified Leads": { "main": [[{ "node": "Prepare Email Batch", "type": "main", "index": 0 }]] },
+    "Prepare Email Batch": { "main": [[{ "node": "Process One by One", "type": "main", "index": 0 }]] },
+    "Process One by One": { "main": [[{ "node": "Anti-Spam Delay (2-5s)", "type": "main", "index": 0 }]] },
+    "Anti-Spam Delay (2-5s)": { "main": [[{ "node": "Send Email (SMTP)", "type": "main", "index": 0 }]] },
+    "Send Email (SMTP)": { "main": [[{ "node": "Update CRM Status", "type": "main", "index": 0 }]] },
+    "Update CRM Status": { "main": [[{ "node": "Process One by One", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": [{ "name": "email" }, { "name": "campaign" }],
+  "pinData": {},
+  "staticData": null
+}
