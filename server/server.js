@@ -502,10 +502,17 @@ app.post('/api/campaigns/send', async (req, res) => {
         null
       );
 
+      // Immediately trigger email processing
+      setTimeout(() => {
+        processQueue().catch(err => {
+          console.error('Error in auto-process after campaign send:', err);
+        });
+      }, 500);
+
       return res.json({
         ok: true,
         queued: result.queued,
-        message: `Queued ${result.queued} emails for background delivery.`
+        message: `Queued ${result.queued} emails for background delivery. Processing started…`
       });
     }
 
