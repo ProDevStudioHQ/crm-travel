@@ -109,6 +109,9 @@ const Settings = {
                         <div class="nav-item ${this.activeTab === 'backup' ? 'active' : ''}" onclick="Settings.switchTab('backup')">
                             <div class="nav-left"><i class="fa-solid fa-database nav-icon"></i> Redundancy</div>
                         </div>
+                        <div class="nav-item ${this.activeTab === 'database' ? 'active' : ''}" onclick="Settings.switchTab('database')">
+                            <div class="nav-left"><i class="fa-solid fa-server nav-icon"></i> Database Engine</div>
+                        </div>
                     </div>
                 </div>
 
@@ -159,7 +162,7 @@ const Settings = {
         const isManager = user.role === 'manager';
 
         // Role-based access control for certain tabs
-        if ((tab === 'team' || tab === 'security' || tab === 'backup' || tab === 'currency' || tab === 'company') && !isAdmin && !isManager) {
+        if ((tab === 'team' || tab === 'security' || tab === 'backup' || tab === 'currency' || tab === 'company' || tab === 'database') && !isAdmin && !isManager) {
             alert('MANAGEMENT ONLY: This section requires executive privileges.');
             return;
         }
@@ -176,6 +179,11 @@ const Settings = {
 
         this.activeTab = tab;
         this.render();
+
+        // Load database status when database tab is opened
+        if (tab === 'database' && isAdmin) {
+            setTimeout(() => Settings.loadDatabaseStatus(), 100);
+        }
     },
 
     uploadAvatar(btn) {
@@ -217,6 +225,8 @@ const Settings = {
                 return this.renderMaintenanceTab();
             case 'security':
                 return this.renderSecurityTab();
+            case 'database':
+                return this.renderDatabaseTab();
             case 'account':
                 return `
                     <div class="section-header" style="margin-bottom:30px; border-bottom:1px solid var(--border); padding-bottom:15px;">
@@ -2054,6 +2064,278 @@ const Settings = {
         setTimeout(() => {
             UI.showFeedback(btn, 'success');
         }, 1500);
+    },
+
+    renderDatabaseTab() {
+        const user = store.state.currentUser || {};
+        const isAdmin = user.role === 'admin';
+
+        return `
+            <div class="section-header" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:30px; border-bottom:1px solid var(--border); padding-bottom:15px;">
+                <div>
+                    <h3 style="font-size:18px; font-weight:700; letter-spacing:-0.5px;">Database Administration</h3>
+                    <p style="font-size:12px; color:var(--text-muted); margin-top:4px;">Manage database connectivity, migration, and system architecture.</p>
+                </div>
+            </div>
+
+            ${isAdmin ? `
+            <!-- Database Status -->
+            <div id="dbStatusContainer" class="analytics-card-luxury" style="padding:25px; margin-bottom:30px; background:rgba(255,255,255,0.01);">
+                <h4 style="font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--primary); margin-bottom:20px;">System Database Status</h4>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;" id="dbStatusDisplay">
+                    <div style="padding:15px; background:rgba(255,255,255,0.02); border-radius:8px; border-left:4px solid var(--text-muted);">
+                        <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-bottom:8px;">Database Type</div>
+                        <div style="font-size:16px; font-weight:700;" id="dbType">Loading...</div>
+                    </div>
+                    <div style="padding:15px; background:rgba(255,255,255,0.02); border-radius:8px; border-left:4px solid var(--success);">
+                        <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; font-weight:700; margin-bottom:8px;">Connection Status</div>
+                        <div style="font-size:16px; font-weight:700;" id="dbHealth"><i class="fa-solid fa-circle-dot" style="color:var(--warning); margin-right:8px;"></i> Checking...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PostgreSQL Connection Test -->
+            <div class="analytics-card-luxury" style="padding:25px; margin-bottom:30px; border:1px dashed var(--primary);">
+                <h4 style="font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--primary); margin-bottom:20px;"><i class="fa-solid fa-plug" style="margin-right:8px;"></i> PostgreSQL Connection Test</h4>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
+                    <div class="form-group">
+                        <label>Host</label>
+                        <input type="text" id="pgHost" class="form-control" value="db" placeholder="db.example.com">
+                    </div>
+                    <div class="form-group">
+                        <label>Port</label>
+                        <input type="number" id="pgPort" class="form-control" value="5432" placeholder="5432">
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
+                    <div class="form-group">
+                        <label>Database</label>
+                        <input type="text" id="pgDatabase" class="form-control" value="crm_db" placeholder="crm_db">
+                    </div>
+                    <div class="form-group">
+                        <label>SSL Mode</label>
+                        <select id="pgSslMode" class="form-control input-select">
+                            <option value="disable" selected>Disabled</option>
+                            <option value="require">Required</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="pgUser" class="form-control" value="crm_user" placeholder="crm_user">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="pgPassword" class="form-control" placeholder="••••••••••">
+                    </div>
+                </div>
+                <button class="btn-primary" style="width:100%;" onclick="Settings.testDatabaseConnection(this)">
+                    <i class="fa-solid fa-plug"></i> Test PostgreSQL Connection
+                </button>
+            </div>
+
+            <!-- Data Migration Tool -->
+            <div class="analytics-card-luxury" style="padding:25px; margin-bottom:30px; background:rgba(23, 198, 83, 0.03); border:1px solid rgba(23, 198, 83, 0.2);">
+                <h4 style="font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--success); margin-bottom:20px;"><i class="fa-solid fa-boxes-stacked" style="margin-right:8px;"></i> SQLite → PostgreSQL Migration</h4>
+                <div style="display:flex; align-items:center; gap:15px; padding:15px; background:rgba(255,255,255,0.02); border-radius:8px; margin-bottom:20px;">
+                    <div style="flex:1;">
+                        <div style="font-size:14px; font-weight:700; margin-bottom:4px;">Automated Data Migration</div>
+                        <p style="font-size:11px; color:var(--text-muted); margin:0;">Migrate all data from SQLite to PostgreSQL with full validation. Zero downtime approach with dual-DB support.</p>
+                    </div>
+                </div>
+                <button class="btn-success" style="width:100%; margin-bottom:15px;" onclick="Settings.startDataMigration(this)">
+                    <i class="fa-solid fa-database"></i> Start Migration Process
+                </button>
+                <div id="migrationProgress" style="display:none;">
+                    <div style="margin-bottom:15px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                            <span style="font-size:12px; font-weight:600;">Migration Progress</span>
+                            <span id="migrationPercent" style="font-size:12px; font-weight:700;">0%</span>
+                        </div>
+                        <div style="height:6px; background:rgba(255,255,255,0.1); border-radius:3px; overflow:hidden;">
+                            <div id="migrationBar" style="height:100%; background:var(--success); width:0%; transition:width 0.3s;"></div>
+                        </div>
+                    </div>
+                    <div id="migrationLog" style="background:rgba(0,0,0,0.3); border-radius:6px; padding:12px; max-height:250px; overflow-y:auto; font-size:10px; font-family:'Courier New', monospace; color:var(--text-secondary); border:1px solid var(--border);">
+                        <span style="color:var(--text-muted);">Migration logs will appear here...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cutover & Platform Switch -->
+            <div class="analytics-card-luxury" style="padding:25px; background:rgba(255, 152, 0, 0.03); border:1px solid rgba(255, 152, 0, 0.2);">
+                <h4 style="font-size:13px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--warning); margin-bottom:20px;"><i class="fa-solid fa-power-off" style="margin-right:8px;"></i> Cutover & Platform Switch</h4>
+                <div style="padding:15px; background:rgba(255,255,255,0.02); border-radius:8px; margin-bottom:20px; border-left:4px solid var(--warning);">
+                    <p style="font-size:11px; color:var(--text-secondary); margin:0;"><strong>⚠ Critical Operation:</strong> Once migration is complete and validated, switch the application to use PostgreSQL. The application will restart automatically with the new database backend.</p>
+                </div>
+                <button class="btn-primary" style="width:100%; background:var(--warning); border-color:var(--warning); color:white;" onclick="Settings.switchToPostgres(this)">
+                    <i class="fa-solid fa-power-off"></i> Switch to PostgreSQL & Restart
+                </button>
+            </div>
+            ` : `
+            <div class="card" style="padding:40px; text-align:center; border:1px dashed var(--border); background:rgba(255,255,255,0.01);">
+                <i class="fa-solid fa-lock" style="font-size:48px; opacity:0.3; margin-bottom:15px;"></i>
+                <p style="font-size:16px; font-weight:700; margin-bottom:8px;">Admin Access Required</p>
+                <p style="font-size:13px; color:var(--text-muted);">Database configuration and migration operations are restricted to administrators only.</p>
+            </div>
+            `}
+        `;
+    },
+
+    async testDatabaseConnection(btn) {
+        const pgHost = document.getElementById('pgHost').value.trim();
+        const pgPort = document.getElementById('pgPort').value.trim();
+        const pgDatabase = document.getElementById('pgDatabase').value.trim();
+        const pgUser = document.getElementById('pgUser').value.trim();
+        const pgPassword = document.getElementById('pgPassword').value.trim();
+        const pgSslMode = document.getElementById('pgSslMode').value;
+
+        if (!pgHost || !pgDatabase || !pgUser) {
+            alert('Host, Database, and User are required.');
+            return;
+        }
+
+        UI.showFeedback(btn, 'loading');
+
+        try {
+            const response = await fetch(store.apiBase() + '/api/settings/db-test-connection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ pgHost, pgPort, pgDatabase, pgUser, pgPassword, pgSslMode })
+            });
+
+            const result = await response.json();
+
+            if (result.ok) {
+                UI.showFeedback(btn, 'success');
+                UI.showToast('✓ PostgreSQL Connection Successful!', 'success');
+                store.logAction('SETTINGS', 'DB_TEST_CONNECTION', 'POSTGRESQL', 'success', 'PostgreSQL connection verified successfully');
+            } else {
+                UI.showFeedback(btn, 'error');
+                alert(`Connection Failed:\n${result.message}`);
+            }
+        } catch (err) {
+            UI.showFeedback(btn, 'error');
+            alert(`Connection Error:\n${err.message}`);
+        }
+    },
+
+    async startDataMigration(btn) {
+        if (!confirm('⚠ Critical Operation: Start SQLite to PostgreSQL migration?\n\nThis process will:\n• Copy all data from SQLite to PostgreSQL\n• Validate data integrity\n• Can take several minutes depending on data size\n\nProceed?')) {
+            return;
+        }
+
+        UI.showFeedback(btn, 'loading');
+        btn.style.display = 'none';
+
+        const progressDiv = document.getElementById('migrationProgress');
+        const logDiv = document.getElementById('migrationLog');
+        progressDiv.style.display = 'block';
+        logDiv.innerHTML = '<span style="color:var(--primary);">▶ Initializing migration...</span>';
+
+        try {
+            const response = await fetch(store.apiBase() + '/api/settings/db-migrate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\\n');
+                buffer = lines.pop();
+
+                for (const line of lines) {
+                    if (line.trim()) {
+                        try {
+                            const data = JSON.parse(line);
+                            const icon = data.status === 'complete' ? '✓' : data.status === 'error' ? '✗' : '▶';
+                            logDiv.innerHTML += `<div style="margin-bottom:4px;"><span style="color:${data.status === 'error' ? 'var(--danger)' : data.status === 'complete' ? 'var(--success)' : 'var(--text-secondary)'};">${icon}</span> ${data.message || data.status}</div>`;
+                            logDiv.scrollTop = logDiv.scrollHeight;
+
+                            if (data.status === 'complete') {
+                                document.getElementById('migrationPercent').textContent = '100%';
+                                document.getElementById('migrationBar').style.width = '100%';
+                                store.logAction('SETTINGS', 'DB_MIGRATION_COMPLETE', 'POSTGRESQL', 'success', `Migration completed in ${data.duration_ms}ms`);
+                            }
+                        } catch (e) {
+                            logDiv.innerHTML += `<div style="margin-bottom:4px; color:var(--text-muted);">► ${line}</div>`;
+                        }
+                    }
+                }
+            }
+
+            UI.showToast('✓ Migration completed! Review the logs above.', 'success');
+        } catch (err) {
+            logDiv.innerHTML += `<div style="color:var(--danger); margin-bottom:4px;">✗ Error: ${err.message}</div>`;
+            UI.showToast('✗ Migration error: ' + err.message, 'error');
+            store.logAction('SETTINGS', 'DB_MIGRATION_ERROR', 'POSTGRESQL', 'error', err.message);
+        }
+    },
+
+    async loadDatabaseStatus() {
+        try {
+            const response = await fetch(store.apiBase() + '/api/settings/db-status');
+            const result = await response.json();
+
+            if (result.ok) {
+                const dbTypeEl = document.getElementById('dbType');
+                const dbHealthEl = document.getElementById('dbHealth');
+
+                if (dbTypeEl) {
+                    dbTypeEl.textContent = result.currentDb.toUpperCase();
+                    dbTypeEl.style.color = result.currentDb === 'postgres' ? 'var(--success)' : 'var(--primary)';
+                }
+
+                if (dbHealthEl) {
+                    const status = result.isHealthy ? 'Connected' : 'Disconnected';
+                    const icon = result.isHealthy ? 'fa-circle-check' : 'fa-circle-xmark';
+                    const color = result.isHealthy ? 'var(--success)' : 'var(--danger)';
+                    dbHealthEl.innerHTML = `<i class="fa-solid ${icon}" style="color:${color}; margin-right:8px;"></i> ${status}`;
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load database status:', err);
+        }
+    },
+
+    async switchToPostgres(btn) {
+        if (!confirm('⚠ Critical Operation: Switch to PostgreSQL?\n\nThis will:\n• Set DB_TYPE to postgres\n• Restart the application\n• Switch all operations to PostgreSQL\n\nProceed?')) {
+            return;
+        }
+
+        UI.showFeedback(btn, 'loading');
+
+        try {
+            const response = await fetch(store.apiBase() + '/api/settings/db-switch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const result = await response.json();
+
+            if (result.ok) {
+                UI.showFeedback(btn, 'success');
+                UI.showToast('Application is restarting with PostgreSQL...', 'success');
+                store.logAction('SETTINGS', 'DB_SWITCH_TO_POSTGRES', 'SYSTEM', 'success', 'Application switched to PostgreSQL backend');
+                setTimeout(() => window.location.reload(), 2000);
+            } else {
+                UI.showFeedback(btn, 'error');
+                alert('Cutover error: ' + result.message);
+            }
+        } catch (err) {
+            UI.showFeedback(btn, 'error');
+            alert('Cutover error: ' + err.message);
+        }
     }
 };
 

@@ -1,434 +1,375 @@
-const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
-const fs = require('fs');
+const sqlite3 = require('sqlite3').verbose();
+const adapter = require('./lib/db-adapter');
+const { initPostgresSchema } = require('./lib/db-schema-pg');
 
-// ── DB lives in /app/data/ (the named Docker volume) ──────────────
-// ⚠️  NEVER store the DB inside /app/server/ — that directory is part
-//     of the Docker image layer. On rebuild the volume overlay can
-//     hide new server code, causing 502s and stale-code bugs.
-const dataDir = path.resolve(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-const dbPath = path.join(dataDir, 'database.sqlite');
-const db = new sqlite3.Database(dbPath, (err) => {
-    if (err) {
-        console.error('Error connecting to SQLite database:', err.message);
-    } else {
-        console.log('Connected to the SQLite database.');
-        initDb();
-    }
-});
+let db;
 
-function initDb() {
-    db.serialize(() => {
-        // Settings table for storing SMTP config
-        db.run(`CREATE TABLE IF NOT EXISTS settings (
+// Initialize database
+async function initDb() {
+  const dbPath = path.join(__dirname, '../data/database.sqlite');
+
+  if (process.env.DB_TYPE === 'postgres') {
+    console.log('[DB] Initializing PostgreSQL...');
+    await adapter.init();
+    await initPostgresSchema(adapter);
+  } else {
+    console.log('[DB] Initializing SQLite...');
+    db = new sqlite3.Database(dbPath, (err) => {
+      if (err) {
+        console.error('[DB] SQLite Error:', err.message);
+        process.exit(1);
+      }
+      console.log('[DB] SQLite connected to', dbPath);
+    });
+
+    adapter.setSqliteDb(db);
+
+    // Create tables
+    return new Promise((resolve, reject) => {
+      db.serialize(() => {
+        // Settings table
+        db.run(`
+          CREATE TABLE IF NOT EXISTS settings (
             key TEXT PRIMARY KEY,
-            value TEXT
-        )`);
+            value TEXT NOT NULL
+          )
+        `);
 
-        // Email Queue table
-        db.run(`CREATE TABLE IF NOT EXISTS email_queue (
+        // Email queue
+        db.run(`
+          CREATE TABLE IF NOT EXISTS email_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             to_email TEXT NOT NULL,
             subject TEXT NOT NULL,
-            html TEXT,
-            status TEXT DEFAULT 'pending', -- pending, sent, failed
+            body TEXT,
+            status TEXT DEFAULT 'pending',
             tries INTEGER DEFAULT 0,
-            last_error TEXT,
-            campaign_id TEXT,
-            scheduled_at DATETIME,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            sent_at DATETIME
-        )`);
+            campaign_id INTEGER,
+            scheduled_at TEXT,
+            sent_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-        // ---- Lead Tools Pack V1 ----
-
-        // Enrichment Jobs
-        db.run(`CREATE TABLE IF NOT EXISTS enrichment_jobs (
+        // Enrichment jobs
+        db.run(`
+          CREATE TABLE IF NOT EXISTS enrichment_jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            status TEXT DEFAULT 'queued',
+            status TEXT DEFAULT 'pending',
             total INTEGER DEFAULT 0,
             processed INTEGER DEFAULT 0,
             errors INTEGER DEFAULT 0,
             mode TEXT,
-            notes TEXT
-        )`);
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-        // Enrichment Results (per-lead)
-        db.run(`CREATE TABLE IF NOT EXISTS enrichment_results (
+        // Enrichment results
+        db.run(`
+          CREATE TABLE IF NOT EXISTS enrichment_results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_id INTEGER,
-            lead_id TEXT,
-            status TEXT DEFAULT 'pending',
+            lead_id INTEGER,
+            status TEXT,
             changes_json TEXT,
             error TEXT,
-            FOREIGN KEY (job_id) REFERENCES enrichment_jobs(id)
-        )`);
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-        // Duplicate Pairs
-        db.run(`CREATE TABLE IF NOT EXISTS lead_duplicates (
+        // Lead duplicates
+        db.run(`
+          CREATE TABLE IF NOT EXISTS lead_duplicates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lead_id_a TEXT,
-            lead_id_b TEXT,
+            lead_id_a INTEGER NOT NULL,
+            lead_id_b INTEGER NOT NULL,
             rule TEXT,
-            score INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'open',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
+            score REAL DEFAULT 0,
+            status TEXT DEFAULT 'pending',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-        // Email Verifications
-        db.run(`CREATE TABLE IF NOT EXISTS email_verifications (
+        // Email verifications
+        db.run(`
+          CREATE TABLE IF NOT EXISTS email_verifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            lead_id TEXT,
-            email TEXT,
-            status TEXT DEFAULT 'unknown',
+            lead_id INTEGER,
+            email TEXT NOT NULL,
+            status TEXT,
             reason TEXT,
-            checked_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
+            checked_at TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-        // Audit Logs (Backup SOP)
-        db.run(`CREATE TABLE IF NOT EXISTS audit_logs (
+        // Audit logs
+        db.run(`
+          CREATE TABLE IF NOT EXISTS audit_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT,
+            user_id INTEGER,
             action TEXT NOT NULL,
-            entity_type TEXT NOT NULL,
-            entity_id TEXT,
+            entity_type TEXT,
+            entity_id INTEGER,
             old_value TEXT,
             new_value TEXT,
             ip TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
+            timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-        // Import Jobs (Backup SOP)
-        db.run(`CREATE TABLE IF NOT EXISTS import_jobs (
+        // Import jobs
+        db.run(`
+          CREATE TABLE IF NOT EXISTS import_jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             module TEXT NOT NULL,
-            uploaded_by TEXT,
-            status TEXT DEFAULT 'processing',
-            uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
+            uploaded_by INTEGER,
+            status TEXT DEFAULT 'pending',
+            uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT
+          )
+        `);
 
-        // --- Email Analytics ---
-        db.run(`CREATE TABLE IF NOT EXISTS campaigns (
-            id TEXT PRIMARY KEY,
-            name TEXT,
+        // Campaigns
+        db.run(`
+          CREATE TABLE IF NOT EXISTS campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
             channel TEXT,
             target TEXT,
-            status TEXT,
-            sent_at DATETIME,
+            status TEXT DEFAULT 'draft',
+            sent_at TEXT,
             subject TEXT,
-            from_name TEXT
-        )`);
+            from_name TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-        db.run(`CREATE TABLE IF NOT EXISTS campaign_recipients (
-            id TEXT PRIMARY KEY,
-            campaign_id TEXT,
-            email TEXT,
-            contact_id TEXT,
-            message_id TEXT,
-            delivered_at DATETIME,
-            bounced_at DATETIME,
-            bounce_type TEXT,
-            FOREIGN KEY (campaign_id) REFERENCES campaigns(id)
-        )`);
-
-        db.run(`CREATE TABLE IF NOT EXISTS campaign_events (
+        // Campaign recipients
+        db.run(`
+          CREATE TABLE IF NOT EXISTS campaign_recipients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            campaign_id TEXT,
-            recipient_id TEXT,
-            type TEXT, 
-            event_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            meta TEXT,
-            FOREIGN KEY (campaign_id) REFERENCES campaigns(id),
-            FOREIGN KEY (recipient_id) REFERENCES campaign_recipients(id)
-        )`);
+            campaign_id INTEGER NOT NULL,
+            email TEXT NOT NULL,
+            contact_id INTEGER,
+            message_id TEXT,
+            delivered_at TEXT,
+            bounced_at TEXT,
+            bounce_type TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
 
-        db.run(`CREATE TABLE IF NOT EXISTS campaign_aggregates (
-            campaign_id TEXT,
-            date TEXT,
+        // Campaign events
+        db.run(`
+          CREATE TABLE IF NOT EXISTS campaign_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            campaign_id INTEGER NOT NULL,
+            recipient_id INTEGER,
+            type TEXT NOT NULL,
+            event_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            meta TEXT
+          )
+        `);
+
+        // Campaign aggregates
+        db.run(`
+          CREATE TABLE IF NOT EXISTS campaign_aggregates (
+            campaign_id INTEGER NOT NULL,
+            date TEXT NOT NULL,
             sent INTEGER DEFAULT 0,
             delivered INTEGER DEFAULT 0,
-            hard_bounce INTEGER DEFAULT 0,
-            soft_bounce INTEGER DEFAULT 0,
-            unique_opens INTEGER DEFAULT 0,
-            unique_clicks INTEGER DEFAULT 0,
+            bounces INTEGER DEFAULT 0,
+            opens INTEGER DEFAULT 0,
+            clicks INTEGER DEFAULT 0,
             unsubs INTEGER DEFAULT 0,
             complaints INTEGER DEFAULT 0,
             leads INTEGER DEFAULT 0,
             bookings INTEGER DEFAULT 0,
             revenue REAL DEFAULT 0,
             PRIMARY KEY (campaign_id, date)
-        )`);
-        // Unsubscribes table (email compliance)
-        db.run(`CREATE TABLE IF NOT EXISTS unsubscribes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
-            unsubscribed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
-        // n8n Leads table (scraped/imported leads from n8n workflows)
-        db.run(`CREATE TABLE IF NOT EXISTS n8n_leads (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT DEFAULT '',
-            email TEXT NOT NULL UNIQUE,
-            company TEXT DEFAULT '',
-            phone TEXT DEFAULT '',
-            country TEXT DEFAULT '',
-            website TEXT DEFAULT '',
-            source TEXT DEFAULT 'manual',
-            score INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'new',
-            notes TEXT DEFAULT '',
-            raw_data TEXT DEFAULT '{}',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
+          )
+        `);
 
-        // n8n Events log (webhook events, campaign events, etc.)
-        db.run(`CREATE TABLE IF NOT EXISTS n8n_events (
+        // Unsubscribes
+        db.run(`
+          CREATE TABLE IF NOT EXISTS unsubscribes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            unsubscribed_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        // n8n leads
+        db.run(`
+          CREATE TABLE IF NOT EXISTS n8n_leads (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            email TEXT,
+            company TEXT,
+            phone TEXT,
+            country TEXT,
+            website TEXT,
+            source TEXT,
+            score INTEGER,
+            status TEXT,
+            notes TEXT,
+            raw_data TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+
+        // n8n events
+        db.run(`
+          CREATE TABLE IF NOT EXISTS n8n_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lead_id INTEGER,
             event_type TEXT NOT NULL,
-            campaign_id TEXT,
-            meta TEXT DEFAULT '{}',
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`);
-
-        console.log('Database tables initialized.');
-    });
-}
-
-// Helper methods (promisified)
-
-function getSetting(key) {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT value FROM settings WHERE key = ?', [key], (err, row) => {
-            if (err) reject(err);
-            else resolve(row ? JSON.parse(row.value) : null);
+            campaign_id INTEGER,
+            meta TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+          )
+        `, (err) => {
+          if (err) {
+            console.error('[DB] Schema creation error:', err);
+            reject(err);
+          } else {
+            console.log('[DB] SQLite schema initialized');
+            resolve();
+          }
         });
+      });
     });
+  }
 }
 
-function saveSetting(key, value) {
-    return new Promise((resolve, reject) => {
-        const valStr = JSON.stringify(value);
-        db.run(`INSERT INTO settings (key, value) VALUES (?, ?)
-                ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-            [key, valStr],
-            function (err) {
-                if (err) reject(err);
-                else resolve(this.changes);
-            }
-        );
-    });
+// Database helper functions using the adapter
+async function getSetting(key) {
+  const row = await adapter.get('SELECT value FROM settings WHERE key = ?', [key]);
+  return row ? row.value : null;
 }
 
-function addToQueue(emails, subject, html, campaignId, scheduledAt) {
-    return new Promise((resolve, reject) => {
-        const stmt = db.prepare(`INSERT INTO email_queue (to_email, subject, html, campaign_id, scheduled_at) VALUES (?, ?, ?, ?, ?)`);
-
-        let completed = 0;
-        let errors = 0;
-
-        db.serialize(() => {
-            db.run("BEGIN TRANSACTION");
-
-            emails.forEach(email => {
-                stmt.run(email, subject, html, campaignId, scheduledAt, (err) => {
-                    if (err) errors++;
-                });
-                completed++;
-            });
-
-            db.run("COMMIT", (err) => {
-                stmt.finalize();
-                if (err) reject(err);
-                else resolve({ queued: completed, errors });
-            });
-        });
-    });
+async function saveSetting(key, value) {
+  const existing = await getSetting(key);
+  if (existing) {
+    await adapter.run('UPDATE settings SET value = ? WHERE key = ?', [value, key]);
+  } else {
+    await adapter.run('INSERT INTO settings (key, value) VALUES (?, ?)', [key, value]);
+  }
 }
 
-function getPendingEmails(limit = 10) {
-    return new Promise((resolve, reject) => {
-        // Get emails that are pending and either not scheduled or scheduled for now/past
-        // AND not failed too many times (max 3 tries)
-        const now = new Date().toISOString();
-        db.all(`SELECT * FROM email_queue 
-                WHERE status = 'pending' 
-                AND (scheduled_at IS NULL OR scheduled_at <= ?)
-                AND tries < 3
-                ORDER BY created_at ASC 
-                LIMIT ?`,
-            [now, limit], (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows);
-            });
-    });
+async function addToQueue(toEmail, subject, body, campaignId = null) {
+  const result = await adapter.run(
+    'INSERT INTO email_queue (to_email, subject, body, campaign_id) VALUES (?, ?, ?, ?)',
+    [toEmail, subject, body, campaignId]
+  );
+  return result.lastID;
 }
 
-function getPendingCount() {
-    return new Promise((resolve, reject) => {
-        const now = new Date().toISOString();
-        db.get(`SELECT COUNT(*) as count FROM email_queue 
-                WHERE status = 'pending' 
-                AND (scheduled_at IS NULL OR scheduled_at <= ?)
-                AND tries < 3`,
-            [now], (err, row) => {
-                if (err) reject(err);
-                else resolve(row ? row.count : 0);
-            });
-    });
+async function getPendingEmails(limit = 50) {
+  return await adapter.all(
+    'SELECT * FROM email_queue WHERE status = ? LIMIT ?',
+    ['pending', limit]
+  );
 }
 
-function updateEmailStatus(id, status, error = null) {
-    return new Promise((resolve, reject) => {
-        const now = new Date().toISOString();
-        let sql, params;
-
-        if (status === 'sent') {
-            sql = `UPDATE email_queue SET status = ?, sent_at = ? WHERE id = ?`;
-            params = [status, now, id];
-        } else if (status === 'sending') {
-            // Mark as sending without incrementing tries
-            sql = `UPDATE email_queue SET status = ? WHERE id = ?`;
-            params = [status, id];
-        } else if (status === 'pending') {
-            // Re-queue: set back to pending with error logged, increment tries
-            sql = `UPDATE email_queue SET status = ?, last_error = ?, tries = tries + 1 WHERE id = ?`;
-            params = [status, error, id];
-        } else {
-            // failed or other
-            sql = `UPDATE email_queue SET status = ?, last_error = ?, tries = tries + 1 WHERE id = ?`;
-            params = [status, error, id];
-        }
-
-        db.run(sql, params, function (err) {
-            if (err) reject(err);
-            else resolve(this.changes);
-        });
-    });
+async function updateEmailStatus(emailId, status, sentAt = null) {
+  const query = sentAt
+    ? 'UPDATE email_queue SET status = ?, sent_at = ? WHERE id = ?'
+    : 'UPDATE email_queue SET status = ? WHERE id = ?';
+  
+  const params = sentAt ? [status, sentAt, emailId] : [status, emailId];
+  await adapter.run(query, params);
 }
 
-function initCampaignAnalytics(campaign, recipients) {
-    return new Promise((resolve, reject) => {
-        db.serialize(() => {
-            db.run("BEGIN TRANSACTION");
-
-            // Insert campaign
-            const campStmt = db.prepare(`INSERT OR REPLACE INTO campaigns (id, name, channel, target, status, sent_at, subject, from_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
-            campStmt.run(String(campaign.id), campaign.name || 'Untitled', campaign.type || 'Email', campaign.audience || 'B2C', 'sending', new Date().toISOString(), campaign.subject || '', campaign.from_name || '');
-            campStmt.finalize();
-
-            // Insert recipients
-            const recStmt = db.prepare(`INSERT OR IGNORE INTO campaign_recipients (id, campaign_id, email) VALUES (?, ?, ?)`);
-            recipients.forEach(r => {
-                // Generate a unique ID for the recipient (e.g. campaignId + email)
-                const recId = `${campaign.id}_${r}`;
-                recStmt.run(recId, String(campaign.id), r);
-            });
-            recStmt.finalize();
-
-            db.run("COMMIT", (err) => {
-                if (err) reject(err);
-                else resolve(true);
-            });
-        });
-    });
+async function getPendingCount() {
+  const row = await adapter.get(
+    'SELECT COUNT(*) as count FROM email_queue WHERE status = ?',
+    ['pending']
+  );
+  return row ? row.count : 0;
 }
 
-function logCampaignEvent(campaignId, recipientEmail, type, meta = {}) {
-    return new Promise((resolve, reject) => {
-        const recipientId = `${campaignId}_${recipientEmail}`;
-        const metaStr = JSON.stringify(meta);
-
-        const stmt = db.prepare(`INSERT INTO campaign_events (campaign_id, recipient_id, type, meta) VALUES (?, ?, ?, ?)`);
-        stmt.run(String(campaignId), recipientId, type, metaStr, function (err) {
-            if (err) reject(err);
-            else resolve(this.lastID);
-        });
-        stmt.finalize();
-    });
+async function isUnsubscribed(email) {
+  const row = await adapter.get(
+    'SELECT id FROM unsubscribes WHERE email = ?',
+    [email]
+  );
+  return !!row;
 }
 
-// ==== Backup & Audit Helpers ====
-function logAudit(userId, action, entityType, entityId, oldValue, newValue, ip = '') {
-    return new Promise((resolve, reject) => {
-        const stmt = db.prepare(`INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip) VALUES (?, ?, ?, ?, ?, ?, ?)`);
-        stmt.run(
-            userId || 'system',
-            action,
-            entityType,
-            entityId,
-            oldValue ? JSON.stringify(oldValue) : null,
-            newValue ? JSON.stringify(newValue) : null,
-            ip,
-            function (err) {
-                if (err) reject(err);
-                else resolve(this.lastID);
-            }
-        );
-        stmt.finalize();
-    });
+async function logCampaignEvent(campaignId, recipientId, type, meta = null) {
+  await adapter.run(
+    'INSERT INTO campaign_events (campaign_id, recipient_id, type, meta) VALUES (?, ?, ?, ?)',
+    [campaignId, recipientId, type, JSON.stringify(meta)]
+  );
 }
 
-function createImportJob(module, uploadedBy) {
-    return new Promise((resolve, reject) => {
-        const stmt = db.prepare(`INSERT INTO import_jobs (module, uploaded_by) VALUES (?, ?)`);
-        stmt.run(module, uploadedBy || 'system', function (err) {
-            if (err) reject(err);
-            else resolve(this.lastID);
-        });
-        stmt.finalize();
-    });
+async function initCampaignAnalytics(campaignId, date) {
+  const row = await adapter.get(
+    'SELECT id FROM campaign_aggregates WHERE campaign_id = ? AND date = ?',
+    [campaignId, date]
+  );
+  if (!row) {
+    await adapter.run(
+      'INSERT INTO campaign_aggregates (campaign_id, date) VALUES (?, ?)',
+      [campaignId, date]
+    );
+  }
 }
 
-// Check if an email has been unsubscribed
-function isUnsubscribed(email) {
-    return new Promise((resolve, reject) => {
-        db.get('SELECT id FROM unsubscribes WHERE email = ?', [email], (err, row) => {
-            if (err) reject(err);
-            else resolve(!!row);
-        });
-    });
+async function logAudit(userId, action, entityType, entityId, oldValue = null, newValue = null, ip = null) {
+  await adapter.run(
+    'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value, ip) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [userId, action, entityType, entityId, oldValue, newValue, ip]
+  );
+}
+
+async function createImportJob(module, uploadedBy) {
+  const result = await adapter.run(
+    'INSERT INTO import_jobs (module, uploaded_by) VALUES (?, ?)',
+    [module, uploadedBy]
+  );
+  return result.lastID;
+}
+
+// Generic database functions
+async function dbRun(sql, params = []) {
+  return await adapter.run(sql, params);
+}
+
+async function dbAll(sql, params = []) {
+  return await adapter.all(sql, params);
+}
+
+async function dbGet(sql, params = []) {
+  return await adapter.get(sql, params);
+}
+
+async function dbTransaction(callback) {
+  return await adapter.transaction(callback);
 }
 
 module.exports = {
-    db,
-    getSetting,
-    saveSetting,
-    addToQueue,
-    getPendingEmails,
-    updateEmailStatus,
-    getPendingCount,
-    isUnsubscribed,
-    initCampaignAnalytics,
-    logCampaignEvent,
-    logAudit,
-    createImportJob,
-    // Generic helpers for Lead Tools
-    dbRun(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            db.run(sql, params, function (err) {
-                if (err) reject(err);
-                else resolve({ lastID: this.lastID, changes: this.changes });
-            });
-        });
-    },
-    dbAll(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            db.all(sql, params, (err, rows) => {
-                if (err) reject(err);
-                else resolve(rows || []);
-            });
-        });
-    },
-    dbGet(sql, params = []) {
-        return new Promise((resolve, reject) => {
-            db.get(sql, params, (err, row) => {
-                if (err) reject(err);
-                else resolve(row || null);
-            });
-        });
-    }
+  initDb,
+  getSetting,
+  saveSetting,
+  addToQueue,
+  getPendingEmails,
+  updateEmailStatus,
+  getPendingCount,
+  isUnsubscribed,
+  logCampaignEvent,
+  initCampaignAnalytics,
+  logAudit,
+  createImportJob,
+  dbRun,
+  dbAll,
+  dbGet,
+  dbTransaction,
+  adapter
 };

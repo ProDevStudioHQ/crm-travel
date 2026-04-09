@@ -2,6 +2,9 @@ FROM node:20-bullseye
 
 WORKDIR /app
 
+# Install PostgreSQL client tools
+RUN apt-get update && apt-get install -y postgresql-client-15 && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first (layer caching)
 COPY package*.json ./
 COPY server/package*.json ./server/

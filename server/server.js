@@ -855,6 +855,177 @@ app.get('/unsubscribe', async (req, res) => {
   `);
 });
 
+// ===== DATABASE MANAGEMENT ROUTES =====
+
+// GET /api/settings/db-status
+app.get('/api/settings/db-status', (req, res) => {
+  // Check admin role
+  if (!req.session || req.session.role !== 'admin') {
+    return res.json({ ok: false, message: 'Admin access required' });
+  }
+
+  const { adapter } = require('./db');
+  const currentDb = process.env.DB_TYPE || 'sqlite';
+
+  const status = {
+    ok: true,
+    currentDb: currentDb,
+    isHealthy: false,
+    stats: {}
+  };
+
+  if (currentDb === 'postgres') {
+    status.stats = {
+      type: 'postgres',
+      host: process.env.PG_HOST || 'db',
+      port: process.env.PG_PORT || 5432,
+      database: process.env.PG_DATABASE || 'crm_db',
+      poolSize: 10
+    };
+  } else {
+    status.stats = {
+      type: 'sqlite',
+      filePath: 'data/database.sqlite'
+    };
+  }
+
+  adapter.health().then(health => {
+    status.isHealthy = health.healthy;
+    res.json(status);
+  }).catch(err => {
+    status.isHealthy = false;
+    res.json(status);
+  });
+});
+
+// POST /api/settings/db-test-connection
+app.post('/api/settings/db-test-connection', async (req, res) => {
+  if (!req.session || req.session.role !== 'admin') {
+    return res.json({ ok: false, message: 'Admin access required' });
+  }
+
+  const { pgHost, pgPort, pgDatabase, pgUser, pgPassword, pgSslMode } = req.body;
+
+  if (!pgHost || !pgDatabase || !pgUser) {
+    return res.json({ ok: false, message: 'Host, Database, and User are required' });
+  }
+
+  try {
+    const { Pool } = require('pg');
+    const testPool = new Pool({
+      host: pgHost,
+      port: pgPort || 5432,
+      database: pgDatabase,
+      user: pgUser,
+      password: pgPassword || '',
+      ssl: pgSslMode === 'require' ? { rejectUnauthorized: false } : false,
+      connectionTimeoutMillis: 5000
+    });
+
+    await testPool.query('SELECT NOW()');
+    await testPool.end();
+
+    res.json({ ok: true, message: 'PostgreSQL connection successful' });
+  } catch (err) {
+    res.json({ ok: false, message: `Connection error: ${err.message}` });
+  }
+});
+
+// POST /api/settings/db-migrate
+app.post('/api/settings/db-migrate', async (req, res) => {
+  if (!req.session || req.session.role !== 'admin') {
+    return res.json({ ok: false, message: 'Admin access required' });
+  }
+
+  try {
+    const { adapter } = require('./db');
+    const { migrateSqliteToPostgres } = require('./lib/migrate-sqlite-to-pg');
+
+    const sqliteDbPath = path.join(__dirname, '../data/database.sqlite');
+
+    if (!fs.existsSync(sqliteDbPath)) {
+      return res.json({ ok: false, message: 'SQLite database not found' });
+    }
+
+    // Set response headers for streaming
+    res.setHeader('Content-Type', 'application/x-ndjson');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    // Start migration in background and stream progress
+    (async () => {
+      try {
+        // Initialize PostgreSQL if not already done
+        if (process.env.DB_TYPE !== 'postgres') {
+          await adapter.init();
+          const { initPostgresSchema } = require('./lib/db-schema-pg');
+          await initPostgresSchema(adapter);
+        }
+
+        res.write(JSON.stringify({ status: 'Initializing migration...', message: 'Starting SQLite to PostgreSQL data migration' }) + '\n');
+
+        const report = await migrateSqliteToPostgres(sqliteDbPath, adapter);
+
+        // Stream table migration results
+        for (const [table, stats] of Object.entries(report.tables)) {
+          const msg = `${table}: ${stats.sourceCount} → ${stats.targetCount} rows`;
+          res.write(JSON.stringify({ status: 'migrating', message: msg, table, sourceCount: stats.sourceCount, targetCount: stats.targetCount, errors: stats.errors }) + '\n');
+        }
+
+        res.write(JSON.stringify({
+          status: 'complete',
+          message: `Migration complete in ${report.duration_ms}ms`,
+          success: report.success,
+          duration_ms: report.duration_ms,
+          tables: report.tables
+        }) + '\n');
+
+        res.end();
+      } catch (err) {
+        res.write(JSON.stringify({ status: 'error', message: `Migration error: ${err.message}` }) + '\n');
+        res.end();
+      }
+    })();
+  } catch (err) {
+    res.json({ ok: false, message: `Migration error: ${err.message}` });
+  }
+});
+
+// POST /api/settings/db-switch
+app.post('/api/settings/db-switch', async (req, res) => {
+  if (!req.session || req.session.role !== 'admin') {
+    return res.json({ ok: false, message: 'Admin access required' });
+  }
+
+  try {
+    // Update environment variable in .env file
+    const envPath = path.join(__dirname, '../.env');
+    let envContent = '';
+
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, 'utf8');
+      envContent = envContent.replace(/DB_TYPE=.*/g, 'DB_TYPE=postgres');
+    } else {
+      envContent = 'DB_TYPE=postgres\n';
+    }
+
+    fs.writeFileSync(envPath, envContent, 'utf8');
+    process.env.DB_TYPE = 'postgres';
+
+    res.json({
+      ok: true,
+      message: 'Database switched to PostgreSQL. Application will restart...'
+    });
+
+    // Restart application after 2 seconds
+    setTimeout(() => {
+      console.log('[DB Switch] Restarting application with PostgreSQL...');
+      process.exit(0);
+    }, 2000);
+  } catch (err) {
+    res.json({ ok: false, message: `Switch error: ${err.message}` });
+  }
+});
+
 // SPA fallback
 app.get('*', (req, res) => {
   res.sendFile(path.join(clientDir, 'index.html'));
@@ -862,12 +1033,18 @@ app.get('*', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-try {
-  app.listen(PORT, () => {
-    console.log("Server running on port " + PORT);
-    // Start background email worker (processes queue every 15 seconds)
-    startWorker(15000);
-  });
-} catch (err) {
-  console.error("Server error:", err);
-}
+(async () => {
+  try {
+    // Initialize database
+    await db.initDb();
+
+    app.listen(PORT, () => {
+      console.log("Server running on port " + PORT);
+      // Start background email worker (processes queue every 15 seconds)
+      startWorker(15000);
+    });
+  } catch (err) {
+    console.error("Startup error:", err);
+    process.exit(1);
+  }
+})();
