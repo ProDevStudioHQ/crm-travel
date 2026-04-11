@@ -11,7 +11,7 @@ services:
       - NODE_ENV=production
       - PORT=3000
       - DB_TYPE=postgres
-      - DATABASE_URL=${DATABASE_URL:-postgresql://app-user:123456789%40%40Aa@crm-database-scijlk:5432/crm-db}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://app-user:123456789@@Aa@crm-database-scijlk:5432/crm-db}
       - PG_SSL_MODE=${PG_SSL_MODE:-disable}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT:-465}
