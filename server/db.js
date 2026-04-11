@@ -8,11 +8,19 @@ let db;
 // Initialize database
 async function initDb() {
   const dbPath = path.join(__dirname, '../data/database.sqlite');
+  
+  // Detect database type from environment
+  const dbType = process.env.DB_TYPE || 'sqlite';
+  console.log(`[DB] Database type detected: ${dbType}`);
 
-  if (process.env.DB_TYPE === 'postgres') {
+  if (dbType === 'postgres') {
     console.log('[DB] Initializing PostgreSQL...');
     await adapter.init();
     await initPostgresSchema(adapter);
+    
+    // Save database type to settings table for reference
+    await saveSetting('database_type', 'postgres');
+    console.log('[DB] Database type saved to settings: postgres');
   } else {
     console.log('[DB] Initializing SQLite...');
     db = new sqlite3.Database(dbPath, (err) => {
@@ -263,7 +271,6 @@ async function initDb() {
   }
 }
 
-// Database helper functions using the adapter
 async function getSetting(key) {
   const row = await adapter.get('SELECT value FROM settings WHERE key = ?', [key]);
   if (!row) return null;
@@ -286,6 +293,33 @@ async function saveSetting(key, value) {
     await adapter.run('UPDATE settings SET value = ? WHERE key = ?', [storageValue, key]);
   } else {
     await adapter.run('INSERT INTO settings (key, value) VALUES (?, ?)', [key, storageValue]);
+  }
+}
+
+// Get current database type (from environment or settings)
+async function getDatabaseType() {
+  // Priority 1: Return from environment variable
+  if (process.env.DB_TYPE) {
+    return process.env.DB_TYPE;
+  }
+  
+  // Priority 2: Return from settings table
+  try {
+    const dbType = await getSetting('database_type');
+    return dbType || 'sqlite';
+  } catch (err) {
+    console.log('[DB] Could not retrieve database_type from settings:', err.message);
+    return 'sqlite';
+  }
+}
+
+// Save database type to settings (used during initialization)
+async function saveDatabaseType(dbType) {
+  try {
+    await saveSetting('database_type', dbType);
+    console.log(`[DB] Saved database type to settings: ${dbType}`);
+  } catch (err) {
+    console.log('[DB] Could not save database_type to settings:', err.message);
   }
 }
 
@@ -414,6 +448,8 @@ module.exports = {
   initDb,
   getSetting,
   saveSetting,
+  getDatabaseType,
+  saveDatabaseType,
   addToQueue,
   getPendingEmails,
   updateEmailStatus,
