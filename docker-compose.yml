@@ -10,13 +10,13 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DB_TYPE=sqlite
-      - PG_HOST=db
-      - PG_PORT=5432
-      - PG_DATABASE=${POSTGRES_DB:-crm_db}
-      - PG_USER=${POSTGRES_USER:-crm_user}
-      - PG_PASSWORD=${POSTGRES_PASSWORD:-crm_password}
-      - PG_SSL_MODE=disable
+      - DB_TYPE=postgres
+      - PG_HOST=${PG_HOST:-crm-database-scijlk}
+      - PG_PORT=${PG_PORT:-5432}
+      - PG_DATABASE=${PG_DATABASE:-crm-db}
+      - PG_USER=${PG_USER:-app-user}
+      - PG_PASSWORD=${PG_PASSWORD:-123456789@@Aa}
+      - PG_SSL_MODE=${PG_SSL_MODE:-disable}
       - SMTP_HOST=${SMTP_HOST}
       - SMTP_PORT=${SMTP_PORT:-465}
       - SMTP_SECURE=${SMTP_SECURE:-true}
@@ -43,9 +43,6 @@ services:
       - ADMIN_EMAIL=${ADMIN_EMAIL}
     volumes:
       - crm_data:/app/data
-    depends_on:
-      db:
-        condition: service_healthy
     labels:
       - "traefik.enable=true"
       - "traefik.http.services.pm-travel-crm.loadbalancer.server.port=3000"
@@ -58,30 +55,8 @@ services:
     networks:
       - crm-network
 
-  db:
-    image: postgres:15-alpine
-    container_name: pm-travel-crm-db
-    restart: unless-stopped
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-crm_db}
-      - POSTGRES_USER=${POSTGRES_USER:-crm_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-crm_password}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-crm_user}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - crm-network
-
 volumes:
   crm_data:
-    driver: local
-  postgres_data:
     driver: local
 
 networks:
