@@ -297,32 +297,6 @@ async function saveSetting(key, value) {
 }
 
 // Get current database type (from environment or settings)
-async function getDatabaseType() {
-  // Priority 1: Return from environment variable
-  if (process.env.DB_TYPE) {
-    return process.env.DB_TYPE;
-  }
-  
-  // Priority 2: Return from settings table
-  try {
-    const dbType = await getSetting('database_type');
-    return dbType || 'sqlite';
-  } catch (err) {
-    console.log('[DB] Could not retrieve database_type from settings:', err.message);
-    return 'sqlite';
-  }
-}
-
-// Save database type to settings (used during initialization)
-async function saveDatabaseType(dbType) {
-  try {
-    await saveSetting('database_type', dbType);
-    console.log(`[DB] Saved database type to settings: ${dbType}`);
-  } catch (err) {
-    console.log('[DB] Could not save database_type to settings:', err.message);
-  }
-}
-
 async function addToQueue(toEmail, subject, body, campaignId = null) {
   const result = await adapter.run(
     'INSERT INTO email_queue (to_email, subject, body, campaign_id) VALUES (?, ?, ?, ?)',
@@ -448,8 +422,6 @@ module.exports = {
   initDb,
   getSetting,
   saveSetting,
-  getDatabaseType,
-  saveDatabaseType,
   addToQueue,
   getPendingEmails,
   updateEmailStatus,

@@ -2,26 +2,8 @@ console.log("APP STARTING...");
 console.log("=".repeat(60));
 console.log("ENVIRONMENT CONFIGURATION:");
 console.log(`  NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
-console.log(`  DB_TYPE: ${process.env.DB_TYPE || 'NOT SET (defaulting to sqlite)'}`);
-console.log(`  DATABASE_URL: ${process.env.DATABASE_URL ? '✓ SET' : '✗ NOT SET'}`);
-console.log(`  PG_HOST: ${process.env.PG_HOST || 'NOT SET'}`);
-console.log(`  PG_PORT: ${process.env.PG_PORT || 'NOT SET'}`);
-console.log(`  PG_DATABASE: ${process.env.PG_DATABASE || 'NOT SET'}`);
+console.log(`  DB_TYPE: ${process.env.DB_TYPE || 'sqlite'}`);
 console.log("=".repeat(60));
-
-// ---- CRITICAL FIX: For Dokploy, ensure DB_TYPE is set from docker-compose.yml ----
-// If DB_TYPE is not set, try to get it from docker-compose defaults
-if (!process.env.DB_TYPE) {
-  console.warn('⚠️  WARNING: DB_TYPE environment variable not set!');
-  console.warn('   Setting default to: postgres (for Dokploy)');
-  process.env.DB_TYPE = 'postgres';
-}
-
-if (!process.env.DATABASE_URL && process.env.DB_TYPE === 'postgres') {
-  console.warn('⚠️  WARNING: DATABASE_URL not set!');
-  console.warn('   Using default: postgresql://app-user:123456789@@Aa@crm-database-scijlk:5432/crm-db');
-  process.env.DATABASE_URL = 'postgresql://app-user:123456789@@Aa@crm-database-scijlk:5432/crm-db';
-}
 
 // Load .env file from project root (parent of /server)
 const path = require('path');
