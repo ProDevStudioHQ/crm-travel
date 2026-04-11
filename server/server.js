@@ -1,6 +1,13 @@
 console.log("APP STARTING...");
-// ---------------- GLOBAL PROCESS OVERRIDES ----------------
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+console.log("=".repeat(60));
+console.log("ENVIRONMENT CONFIGURATION:");
+console.log(`  NODE_ENV: ${process.env.NODE_ENV || 'development'}`);
+console.log(`  DB_TYPE: ${process.env.DB_TYPE || 'NOT SET (defaulting to sqlite)'}`);
+console.log(`  DATABASE_URL: ${process.env.DATABASE_URL ? '✓ SET' : '✗ NOT SET'}`);
+console.log(`  PG_HOST: ${process.env.PG_HOST || 'NOT SET'}`);
+console.log(`  PG_PORT: ${process.env.PG_PORT || 'NOT SET'}`);
+console.log(`  PG_DATABASE: ${process.env.PG_DATABASE || 'NOT SET'}`);
+console.log("=".repeat(60));
 
 // Load .env file from project root (parent of /server)
 const path = require('path');
@@ -1281,11 +1288,22 @@ const PORT = process.env.PORT || 3000;
 
 (async () => {
   try {
+    // Verify database type is set
+    const dbType = process.env.DB_TYPE || 'sqlite';
+    if (dbType !== 'postgres' && dbType !== 'sqlite') {
+      console.error('\n⚠️  ERROR: Invalid DB_TYPE. Must be "postgres" or "sqlite"');
+      console.error(`   Current value: ${dbType}`);
+      process.exit(1);
+    }
+
     // Initialize database
     await db.initDb();
 
-    app.listen(PORT, () => {
-      console.log("Server running on port " + PORT);
+    const server = app.listen(PORT, () => {
+      console.log("\n" + "✓".repeat(20));
+      console.log(`✓ Server running on port ${PORT}`);
+      console.log(`✓ Database: ${dbType.toUpperCase()}`);
+      console.log("✓".repeat(20) + "\n");
       // Start background email worker (processes queue every 15 seconds)
       startWorker(15000);
     });
