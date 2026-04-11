@@ -9,8 +9,11 @@ RUN apt-get update && apt-get install -y postgresql-client-15 && rm -rf /var/lib
 COPY package*.json ./
 COPY server/package*.json ./server/
 
-RUN npm install
-RUN cd server && npm install
+RUN npm install --legacy-peer-deps
+RUN cd server && npm install --legacy-peer-deps
+
+# CRITICAL FIX: Install undici globally to override transitive dependencies
+RUN npm install undici@^6.13.0
 
 # Copy application code
 COPY . .
