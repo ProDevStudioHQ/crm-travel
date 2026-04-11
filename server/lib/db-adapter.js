@@ -15,19 +15,63 @@ class DatabaseAdapter {
     this.dbType = process.env.DB_TYPE || 'sqlite';
   }
 
+  // Parse DATABASE_URL format: postgresql://user:password@host:port/database
+  parseDbUrl(url) {
+    try {
+      const dbUrl = new URL(url);
+      return {
+        user: dbUrl.username || 'crm_user',
+        password: dbUrl.password || 'crm_password',
+        host: dbUrl.hostname || 'localhost',
+        port: parseInt(dbUrl.port) || 5432,
+        database: dbUrl.pathname.slice(1) || 'crm_db' // Remove leading /
+      };
+    } catch (err) {
+      console.error('[DB] Invalid DATABASE_URL format:', err.message);
+      return null;
+    }
+  }
+
   async init() {
     if (this.dbType === 'postgres') {
+      let pgConfig;
+
+      // Priority 1: Use DATABASE_URL if provided
+      if (process.env.DATABASE_URL) {
+        console.log('[DB] Using DATABASE_URL for PostgreSQL connection');
+        pgConfig = this.parseDbUrl(process.env.DATABASE_URL);
+        if (!pgConfig) {
+          throw new Error('DATABASE_URL is malformed. Expected format: postgresql://user:password@host:port/database');
+        }
+      } else {
+        // Priority 2: Fall back to individual PG_* variables
+        console.log('[DB] Using individual PG_* environment variables for PostgreSQL connection');
+        pgConfig = {
+          host: process.env.PG_HOST || 'db',
+          port: parseInt(process.env.PG_PORT) || 5432,
+          database: process.env.PG_DATABASE || 'crm_db',
+          user: process.env.PG_USER || 'crm_user',
+          password: process.env.PG_PASSWORD || 'crm_password'
+        };
+      }
+
+      // Configure SSL based on environment
+      const sslMode = process.env.PG_SSL_MODE || 'disable';
+      const ssl = sslMode === 'require' ? { rejectUnauthorized: false } : false;
+
       this.pool = new Pool({
-        host: process.env.PG_HOST || 'db',
-        port: process.env.PG_PORT || 5432,
-        database: process.env.PG_DATABASE || 'crm_db',
-        user: process.env.PG_USER || 'crm_user',
-        password: process.env.PG_PASSWORD || 'crm_password',
-        ssl: process.env.PG_SSL_MODE === 'require' ? { rejectUnauthorized: false } : false
+        ...pgConfig,
+        ssl
       });
 
-      await this.pool.query('SELECT NOW()'); // Test connection
-      console.log('✓ PostgreSQL connected');
+      // Test connection
+      try {
+        await this.pool.query('SELECT NOW()');
+        console.log(`✓ PostgreSQL connected to ${pgConfig.host}:${pgConfig.port}/${pgConfig.database}`);
+      } catch (err) {
+        console.error('[DB] PostgreSQL connection failed:', err.message);
+        throw err;
+      }
     } else {
       // SQLite initialization handled by caller
       console.log('✓ SQLite ready');
